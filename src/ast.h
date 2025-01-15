@@ -1,33 +1,10 @@
 #pragma once
-
 #include <cassert>
 #include <memory>
 #include <string>
 #include <iostream>
-#include <sstream>
 #include <map>
-
-/* ENBF */
-// CompUnit :: = FuncDef;
-
-// FuncDef :: = FuncType IDENT "("
-//                             ")" Block;
-// FuncType :: = "int";
-
-// Block :: = "{" Stmt "}";
-// Stmt :: = "return" Exp ";";
-
-// Exp :: = LOrExp;
-// PrimaryExp :: = "(" Exp ")" | Number;
-// Number :: = INT_CONST;
-// UnaryExp :: = PrimaryExp | UnaryOp UnaryExp;
-// UnaryOp :: = "+" | "-" | "!";
-// MulExp :: = UnaryExp | MulExp("*" | "/" | "%") UnaryExp;
-// AddExp :: = MulExp | AddExp("+" | "-") MulExp;
-// RelExp :: = AddExp | RelExp("<" | ">" | "<=" | ">=") AddExp;
-// EqExp :: = RelExp | EqExp("==" | "!=") RelExp;
-// LAndExp :: = EqExp | LAndExp "&&" EqExp;
-// LOrExp :: = LAndExp | LOrExp "||" LAndExp;
+#include <sstream>
 
 class BaseAST;
 class CompUnitAST;
@@ -36,7 +13,6 @@ class FuncTypeAST;
 class BlockAST;
 class StmtAST;
 
-// Expressions
 class ExpAST;
 class PrimaryExpAST;
 class UnaryExpAST;
@@ -47,57 +23,26 @@ class EqExpAST;
 class LAndExpAST;
 class LOrExpAST;
 
-// enums
-enum PrimaryExpType
-{
-    EXP,
-    NUMBER
-};
-enum UnaryExpType
-{
-    PRIMARY,
-    UNARY
-};
-enum BianryOPExpType
-{
-    INHERIT,
-    EXPAND
-};
+enum PrimaryExpType{EXP, NUMBER};
+enum UnaryExpType{PRIMARY, UNARY};
+enum BianryOPExpType{INHERIT, EXPAND};
 
-static std::map<std::string, std::string> op_names = {
-    {"!=", "ne"},
-    {"==", "eq"},
-    {">", "gt"},
-    {"<", "lt"},
-    {">=", "ge"},
-    {"<=", "le"},
-    {"+", "add"},
-    {"-", "sub"},
-    {"*", "mul"},
-    {"/", "div"},
-    {"%", "mod"},
-    {"&&", "and"},
-    {"||", "or"}};
-
-static int symbol_cnt = 0;
-static std::string get_var(std::string str);
+static int symbol_count = 0;
 static std::string get_IR(std::string str);
+static std::string get_var(std::string str);
+static std::map<std::string, std::string> names = {{"!=", "ne"}, {"==", "eq"}, {">", "gt"}, {"<", "lt"}, {">=", "ge"}, {"<=", "le"}, {"+", "add"}, {"-", "sub"}, {"*", "mul"}, {"/", "div"}, {"%", "mod"}, {"&&", "and"}, {"||", "or"}};
 
-// 所有 AST 的基类
 class BaseAST
 {
 public:
     virtual ~BaseAST() = default;
     virtual void Dump() const = 0;
-    virtual std::string GenerateIR() const = 0;
+    virtual std::string DumpIR() const = 0;
 };
 
-// CompUnit 是 BaseAST
-// CompUnit :: = FuncDef;
 class CompUnitAST : public BaseAST
 {
 public:
-    // 用智能指针管理对象
     std::unique_ptr<BaseAST> func_def;
     void Dump() const override
     {
@@ -105,14 +50,12 @@ public:
         func_def->Dump();
         std::cout << "}\n";
     }
-    std::string GenerateIR() const override
-    {
-        return func_def->GenerateIR();
+    std::string DumpIR() const override
+    { 
+        return func_def->DumpIR();
     }
 };
 
-// FuncDef 也是 BaseAST
-// FuncDef ::= FuncType IDENT "(" ")" Block;
 class FuncDefAST : public BaseAST
 {
 public:
@@ -127,19 +70,12 @@ public:
         block->Dump();
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        return "fun @" +
-               ident +
-               "(): " +
-               func_type->GenerateIR() +
-               " {\n" +
-               block->GenerateIR() +
-               "\n}\n";
+        return "fun @" + ident+ "(): " + func_type->DumpIR() + " {\n" + block->DumpIR() + "\n}\n";
     }
 };
 
-// FuncType ::= "int";
 class FuncTypeAST : public BaseAST
 {
 public:
@@ -150,13 +86,12 @@ public:
         std::cout << type;
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
         return "i32";
     }
 };
 
-// Block ::= "{" Stmt "}";
 class BlockAST : public BaseAST
 {
 public:
@@ -167,14 +102,12 @@ public:
         stmt->Dump();
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        return "%entry:\n" +
-               stmt->GenerateIR();
+        return "%entry:\n  " + stmt->DumpIR() + "\n";
     }
 };
 
-// Stmt ::= "return" Exp ";";
 class StmtAST : public BaseAST
 {
 public:
@@ -185,443 +118,448 @@ public:
         exp->Dump();
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        std::string ret = exp->GenerateIR();
-        return get_IR(ret) + "  ret " + get_var(ret);
+        std::string ans = exp->DumpIR();
+        return get_IR(ans) + " ret " + get_var(ans);
     }
 };
 
-// Exp ::= LOrExp;
 class ExpAST : public BaseAST
 {
 public:
-    std::unique_ptr<BaseAST> lor_exp;
+    std::unique_ptr<BaseAST> exp;
     void Dump() const override
     {
         std::cout << "ExpAST {";
-        lor_exp->Dump();
+        exp->Dump();
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        return lor_exp->GenerateIR();
+        return exp->DumpIR();
     }
 };
 
-// PrimaryExp :: = "(" Exp ")" | Number;
 class PrimaryExpAST : public BaseAST
 {
 public:
-    PrimaryExpType bnf_type;
+    PrimaryExpType type;
+    int num;
     std::unique_ptr<BaseAST> exp;
-    int number;
     void Dump() const override
     {
         std::cout << "PrimaryExpAST {";
-        if (bnf_type == PrimaryExpType::EXP)
+        if (type == PrimaryExpType::EXP)
+        {
             exp->Dump();
-        else if (bnf_type == PrimaryExpType::NUMBER)
-            std::cout << number;
+        }
+        else if (type == PrimaryExpType::NUMBER)
+        {
+            std::cout << num;
+        }
         else
+        {
             assert(false);
+        }
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        if (bnf_type == PrimaryExpType::EXP)
+        if (type == PrimaryExpType::EXP)
         {
-            return exp->GenerateIR();
+            return exp->DumpIR();
         }
-        else if (bnf_type == PrimaryExpType::NUMBER)
+        else if (type == PrimaryExpType::NUMBER)
         {
-            return std::to_string(number);
+            return std::to_string(num);
         }
-        return "";
+        else
+        {
+            return "";
+        }
     }
 };
 
-// UnaryExp :: = PrimaryExp | UnaryOp UnaryExp;
 class UnaryExpAST : public BaseAST
 {
 public:
-    UnaryExpType bnf_type;
-    std::unique_ptr<BaseAST> primary_exp;
+    UnaryExpType type;
     std::unique_ptr<BaseAST> unary_exp;
-    std::string unary_op;
+    std::unique_ptr<BaseAST> primary_exp;
+    std::string op;
     void Dump() const override
     {
         std::cout << "UnaryExpAST {";
-        if (bnf_type == UnaryExpType::PRIMARY)
-            primary_exp->Dump();
-        else if (bnf_type == UnaryExpType::UNARY)
+        if (type == UnaryExpType::PRIMARY)
         {
-            std::cout << unary_op;
+            primary_exp->Dump();
+        }
+        else if (type == UnaryExpType::UNARY)
+        {
+            std::cout << op;
             unary_exp->Dump();
         }
         else
+        {
             assert(false);
+        }
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        std::string ret = "";
-        if (bnf_type == UnaryExpType::PRIMARY)
-            ret = primary_exp->GenerateIR();
-        else if (bnf_type == UnaryExpType::UNARY)
+        std::string ans = "";
+        if (type == UnaryExpType::PRIMARY)
         {
-            std::string uir = unary_exp->GenerateIR();
-            std::string var = get_var(uir);
-            std::string ir = get_IR(uir);
-            if (unary_op == "+")
+            ans = primary_exp->DumpIR();
+        }
+        else if (type == UnaryExpType::UNARY)
+        {
+            std::string unary_IR = unary_exp->DumpIR();
+            std::string IR = get_IR(unary_IR);
+            std::string var = get_var(unary_IR);
+            if (op == "+")
             {
-                ret = uir;
+                ans = unary_IR;
             }
-            else if (unary_op == "-")
+            else if (op == "-")
             {
-                ret =
-                    "%" + std::to_string(symbol_cnt) + "\n" +
-                    ir +
-                    "  %" + std::to_string(symbol_cnt) + " = sub 0, " + var + "\n";
-                symbol_cnt++;
+                ans = "%" + std::to_string(symbol_count) + "\n" + IR + "  %" + std::to_string(symbol_count) + " = sub 0, " + var + "\n";
+                symbol_count++;
             }
-            else if (unary_op == "!")
+            else if (op == "!")
             {
-                ret =
-                    "%" + std::to_string(symbol_cnt) + "\n" +
-                    ir +
-                    "  %" + std::to_string(symbol_cnt) + " = eq " + var + ", 0\n";
-                symbol_cnt++;
+                ans = "%" + std::to_string(symbol_count) + "\n" + IR + "  %" + std::to_string(symbol_count) + " = eq " + var + ", 0\n";
+                symbol_count++;
             }
         }
-        return ret;
+        return ans;
     }
 };
 
-// MulExp :: = UnaryExp | MulExp("*" | "/" | "%") UnaryExp;
 class MulExpAST : public BaseAST
 {
 public:
-    BianryOPExpType bnf_type;
-    std::unique_ptr<BaseAST> unary_exp;
+    BianryOPExpType type;
     std::unique_ptr<BaseAST> mul_exp;
+    std::unique_ptr<BaseAST> unary_exp;
     std::string op;
     void Dump() const override
     {
         std::cout << "MulExpAST {";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        if (type == BianryOPExpType::INHERIT)
+        {
             unary_exp->Dump();
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        }
+        else if (type == BianryOPExpType::EXPAND)
         {
             mul_exp->Dump();
             std::cout << " " << op << " ";
             unary_exp->Dump();
         }
         else
+        {
             assert(false);
+        }
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        std::string ret = "";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        std::string ans = "";
+        if (type == BianryOPExpType::INHERIT)
         {
-            ret = unary_exp->GenerateIR();
+            ans = unary_exp->DumpIR();
         }
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        else if (type == BianryOPExpType::EXPAND)
         {
-            std::string l = mul_exp->GenerateIR();
-            std::string lvar = get_var(l);
-            std::string lir = get_IR(l);
-            std::string r = unary_exp->GenerateIR();
-            std::string rvar = get_var(r);
-            std::string rir = get_IR(r);
-            std::string new_var = "%" + std::to_string(symbol_cnt);
-            ret = new_var + "\n" +
-                  lir +
-                  rir +
-                  "  " + new_var + " = " + op_names[op] + " " +
-                  lvar + ", " + rvar + "\n";
-            symbol_cnt++;
+            std::string lhs = mul_exp->DumpIR();
+            std::string lhs_IR = get_IR(lhs);
+            std::string lhs_var = get_var(lhs);
+            std::string rhs = unary_exp->DumpIR();
+            std::string rhs_IR = get_IR(rhs);
+            std::string rhs_var = get_var(rhs);
+            std::string var = "%" + std::to_string(symbol_count++);
+            ans = var + "\n" + lhs_IR + rhs_IR + "  " + var + " = " + names[op] + " " + lhs_var + ", " + rhs_var + "\n";
         }
         else
+        {
             assert(false);
-        return ret;
+        }
+        return ans;
     }
 };
 
-// AddExp :: = MulExp | AddExp("+" | "-") MulExp;
 class AddExpAST : public BaseAST
 {
 public:
-    BianryOPExpType bnf_type;
+    BianryOPExpType type;
     std::unique_ptr<BaseAST> add_exp;
     std::unique_ptr<BaseAST> mul_exp;
     std::string op;
     void Dump() const override
     {
         std::cout << "AddExpAST {";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        if (type == BianryOPExpType::INHERIT)
+        {
             mul_exp->Dump();
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        }
+        else if (type == BianryOPExpType::EXPAND)
         {
             add_exp->Dump();
             std::cout << " " << op << " ";
             mul_exp->Dump();
         }
         else
+        {
             assert(false);
+        }
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        std::string ret = "";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        std::string ans = "";
+        if (type == BianryOPExpType::INHERIT)
         {
-            ret = mul_exp->GenerateIR();
+            ans = mul_exp->DumpIR();
         }
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        else if (type == BianryOPExpType::EXPAND)
         {
-            std::string l = add_exp->GenerateIR();
-            std::string lvar = get_var(l);
-            std::string lir = get_IR(l);
-            std::string r = mul_exp->GenerateIR();
-            std::string rvar = get_var(r);
-            std::string rir = get_IR(r);
-            std::string new_var = "%" + std::to_string(symbol_cnt);
-            ret = new_var + "\n" +
-                  lir +
-                  rir +
-                  "  " + new_var + " = " + op_names[op] + " " +
-                  lvar + ", " + rvar + "\n";
-            symbol_cnt++;
+            std::string lhs = add_exp->DumpIR();
+            std::string lhs_IR = get_IR(lhs);
+            std::string lhs_var = get_var(lhs);
+            std::string rhs = mul_exp->DumpIR();
+            std::string rhs_IR = get_IR(rhs);
+            std::string rhs_var = get_var(rhs);
+            std::string var = "%" + std::to_string(symbol_count++);
+            ans = var + "\n" + lhs_IR + rhs_IR + "  " + var + " = " + names[op] + " " + lhs_var + ", " + rhs_var + "\n";
         }
         else
+        {
             assert(false);
-        return ret;
+        }
+        return ans;
     }
 };
 
-// RelExp :: = AddExp | RelExp("<" | ">" | "<=" | ">=") AddExp;
 class RelExpAST : public BaseAST
 {
 public:
-    BianryOPExpType bnf_type;
-    std::unique_ptr<BaseAST> add_exp;
+    BianryOPExpType type;
     std::unique_ptr<BaseAST> rel_exp;
+    std::unique_ptr<BaseAST> add_exp;
     std::string op;
     void Dump() const override
     {
         std::cout << "RelExpAST {";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        if (type == BianryOPExpType::INHERIT)
+        {
             add_exp->Dump();
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        }
+        else if (type == BianryOPExpType::EXPAND)
         {
             rel_exp->Dump();
             std::cout << " " << op << " ";
             add_exp->Dump();
         }
         else
+        {
             assert(false);
+        }
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        std::string ret = "";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        std::string ans = "";
+        if (type == BianryOPExpType::INHERIT)
         {
-            ret = add_exp->GenerateIR();
+            ans = add_exp->DumpIR();
         }
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        else if (type == BianryOPExpType::EXPAND)
         {
-            std::string l = rel_exp->GenerateIR();
-            std::string lvar = get_var(l);
-            std::string lir = get_IR(l);
-            std::string r = add_exp->GenerateIR();
-            std::string rvar = get_var(r);
-            std::string rir = get_IR(r);
-            std::string new_var = "%" + std::to_string(symbol_cnt);
-            ret = new_var + "\n" +
-                  lir +
-                  rir +
-                  "  " + new_var + " = " + op_names[op] + " " +
-                  lvar + ", " + rvar + "\n";
-            symbol_cnt++;
+            std::string lhs = rel_exp->DumpIR();
+            std::string lhs_IR = get_IR(lhs);
+            std::string lhs_var = get_var(lhs);
+            std::string rhs = add_exp->DumpIR();
+            std::string rhs_IR = get_IR(rhs);
+            std::string rhs_var = get_var(rhs);
+            std::string var = "%" + std::to_string(symbol_count++);
+            ans = var + "\n" + lhs_IR + rhs_IR + "  " + var + " = " + names[op] + " " + lhs_var + ", " + rhs_var + "\n";
         }
         else
+        {
             assert(false);
-        return ret;
+        }
+        return ans;
     }
 };
 
-// EqExp :: = RelExp | EqExp("==" | "!=") RelExp;
 class EqExpAST : public BaseAST
 {
 public:
-    BianryOPExpType bnf_type;
+    BianryOPExpType type;
     std::unique_ptr<BaseAST> eq_exp;
     std::unique_ptr<BaseAST> rel_exp;
     std::string op;
     void Dump() const override
     {
         std::cout << "EqExpAST {";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        if (type == BianryOPExpType::INHERIT)
+        {
             rel_exp->Dump();
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        }
+        else if (type == BianryOPExpType::EXPAND)
         {
             eq_exp->Dump();
             std::cout << " " << op << " ";
             rel_exp->Dump();
         }
         else
+        {
             assert(false);
+        }
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        std::string ret = "";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        std::string ans = "";
+        if (type == BianryOPExpType::INHERIT)
         {
-            ret = rel_exp->GenerateIR();
+            ans = rel_exp->DumpIR();
         }
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        else if (type == BianryOPExpType::EXPAND)
         {
-            std::string l = eq_exp->GenerateIR();
-            std::string lvar = get_var(l);
-            std::string lir = get_IR(l);
-            std::string r = rel_exp->GenerateIR();
-            std::string rvar = get_var(r);
-            std::string rir = get_IR(r);
-            std::string new_var = "%" + std::to_string(symbol_cnt);
-            ret = new_var + "\n" +
-                  lir +
-                  rir +
-                  "  " + new_var + " = " + op_names[op] + " " +
-                  lvar + ", " + rvar + "\n";
-            symbol_cnt++;
+            std::string lhs = eq_exp->DumpIR();
+            std::string lhs_IR = get_IR(lhs);
+            std::string lhs_var = get_var(lhs);
+            std::string rhs = rel_exp->DumpIR();
+            std::string rhs_IR = get_IR(rhs);
+            std::string rhs_var = get_var(rhs);
+            std::string var = "%" + std::to_string(symbol_count++);
+            ans = var + "\n" + lhs_IR + rhs_IR + "  " + var + " = " + names[op] + " " + lhs_var + ", " + rhs_var + "\n";
         }
         else
+        {
             assert(false);
-        return ret;
+        }
+        return ans;
     }
 };
-
 // LAndExp :: = EqExp | LAndExp "&&" EqExp;
 class LAndExpAST : public BaseAST
 {
 public:
-    BianryOPExpType bnf_type;
-    std::unique_ptr<BaseAST> eq_exp;
+    BianryOPExpType type;
     std::unique_ptr<BaseAST> land_exp;
+    std::unique_ptr<BaseAST> eq_exp;
     void Dump() const override
     {
         std::cout << "LAndExpAST {";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        if (type == BianryOPExpType::INHERIT)
+        {
             eq_exp->Dump();
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        }
+        else if (type == BianryOPExpType::EXPAND)
         {
             land_exp->Dump();
             std::cout << " && ";
             eq_exp->Dump();
         }
         else
+        {
             assert(false);
+        }
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        std::string ret = "";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        std::string ans = "";
+        if (type == BianryOPExpType::INHERIT)
         {
-            ret = eq_exp->GenerateIR();
+            ans = eq_exp->DumpIR();
         }
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        else if (type == BianryOPExpType::EXPAND)
         {
-            /*
-            2 && 4
-            %0 = ne 2, 0
-            %1 = ne 4, 0
-            %2 = and %0, %1
-            */
-            std::string l = land_exp->GenerateIR();
-            std::string lvar = get_var(l);
-            std::string lir = get_IR(l);
-            std::string r = eq_exp->GenerateIR();
-            std::string rvar = get_var(r);
-            std::string rir = get_IR(r);
-            std::string new_var = "%" + std::to_string(symbol_cnt+2);
-            ret = new_var + "\n" +
-                  lir +
-                  rir +
-                  "  %" + std::to_string(symbol_cnt) + " = ne " + lvar + ", 0\n" +
-                  "  %" + std::to_string(symbol_cnt + 1) + " = ne " + rvar + ", 0\n" +
-                  "  " + new_var + " = " + op_names["&&"] + " %" +
-                  std::to_string(symbol_cnt) + ", %" + std::to_string(symbol_cnt + 1) + "\n";
-            symbol_cnt+=3;
+            std::string lhs = land_exp->DumpIR();
+            std::string lhs_IR = get_IR(lhs);
+            std::string lhs_var = get_var(lhs);
+            std::string rhs = eq_exp->DumpIR();
+            std::string rhs_IR = get_IR(rhs);
+            std::string rhs_var = get_var(rhs);
+            std::string var = "%" + std::to_string(symbol_count+2);
+            ans = var + "\n" + lhs_IR + rhs_IR + "  %" + std::to_string(symbol_count) + " = ne " + lhs_var + ", 0\n" + "  %" + std::to_string(symbol_count + 1) + " = ne " + rhs_var + ", 0\n" + "  " + var + " = " + names["&&"] + " %" + std::to_string(symbol_count) + ", %" + std::to_string(symbol_count + 1) + "\n";
+            symbol_count += 3;
         }
         else
             assert(false);
-        return ret;
+        return ans;
     }
 };
-// LOrExp :: = LAndExp | LOrExp "||" LAndExp;
+
 class LOrExpAST : public BaseAST
 {
 public:
-    BianryOPExpType bnf_type;
-    std::unique_ptr<BaseAST> land_exp;
+    BianryOPExpType type;
     std::unique_ptr<BaseAST> lor_exp;
+    std::unique_ptr<BaseAST> land_exp;
     void Dump() const override
     {
         std::cout << "LOrExpAST {";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        if (type == BianryOPExpType::INHERIT)
+        {
             land_exp->Dump();
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        }
+        else if (type == BianryOPExpType::EXPAND)
         {
             lor_exp->Dump();
             std::cout << " || ";
             land_exp->Dump();
         }
         else
+        {
             assert(false);
+        }
         std::cout << "}";
     }
-    std::string GenerateIR() const override
+    std::string DumpIR() const override
     {
-        std::string ret = "";
-        if (bnf_type == BianryOPExpType::INHERIT)
+        std::string ans = "";
+        if (type == BianryOPExpType::INHERIT)
         {
-            ret = land_exp->GenerateIR();
+            ans = land_exp->DumpIR();
         }
-        else if (bnf_type == BianryOPExpType::EXPAND)
+        else if (type == BianryOPExpType::EXPAND)
         {
-            /*
-            11 || 0
-            %0 = ne 11, 0
-            %1 = ne 0, 0
-            %2 = or %0, %1
-            */
-            std::string l = lor_exp->GenerateIR();
-            std::string lvar = get_var(l);
-            std::string lir = get_IR(l);
-            std::string r = land_exp->GenerateIR();
-            std::string rvar = get_var(r);
-            std::string rir = get_IR(r);
-            std::string new_var = "%" + std::to_string(symbol_cnt + 2);
-            ret = new_var + "\n" +
-                  lir +
-                  rir +
-                  "  %" + std::to_string(symbol_cnt) + " = ne " + lvar + ", 0\n" +
-                  "  %" + std::to_string(symbol_cnt + 1) + " = ne " + rvar + ", 0\n" +
-                  "  " + new_var + " = " + op_names["||"] + " %" +
-                  std::to_string(symbol_cnt) + ", %" + std::to_string(symbol_cnt + 1) + "\n";
-            symbol_cnt += 3;
+            std::string lhs = lor_exp->DumpIR();
+            std::string lhs_IR = get_IR(lhs);
+            std::string lhs_var = get_var(lhs);
+            std::string rhs = land_exp->DumpIR();
+            std::string rhs_IR = get_IR(rhs);
+            std::string rhs_var = get_var(rhs);
+            std::string var = "%" + std::to_string(symbol_count + 2);
+            ans = var + "\n" + lhs_IR + rhs_IR + "  %" + std::to_string(symbol_count) + " = ne " + lhs_var + ", 0\n" + "  %" + std::to_string(symbol_count + 1) + " = ne " + rhs_var + ", 0\n" + "  " + var + " = " + names["||"] + " %" + std::to_string(symbol_count) + ", %" + std::to_string(symbol_count + 1) + "\n";
+            symbol_count += 3;
         }
         else
+        {
             assert(false);
-        return ret;
+        }
+        return ans;
     }
 };
+
+std::string get_IR(std::string str)
+{
+    std::istringstream iss(str);
+    std::string t;
+    std::getline(iss, t);
+    std::string line;
+    std::string IR;
+    while (std::getline(iss, line))
+    {
+        IR += line + "\n";
+    }
+    return IR;
+}
 
 std::string get_var(std::string str)
 {
@@ -629,20 +567,4 @@ std::string get_var(std::string str)
     std::string var;
     std::getline(iss, var);
     return var;
-}
-
-std::string get_IR(std::string str)
-{
-    std::istringstream iss(str);
-    std::string var;
-    std::getline(iss, var);
-
-    std::string IR;
-    std::string line;
-    while (std::getline(iss, line))
-    {
-        IR += line + "\n";
-    }
-
-    return IR;
 }

@@ -1,7 +1,7 @@
 %code requires {
-  #include <memory>
-  #include <string>
-  #include <ast.h>
+    #include <memory>
+    #include <string>
+    #include <ast.h>
 }
 
 %{
@@ -30,9 +30,9 @@ using namespace std;
 // 至于为什么要用字符串指针而不直接用 string 或者 unique_ptr<string>?
 // 请自行 STFW 在 union 里写一个带析构函数的类会出现什么情况
 %union {
-  std::string *str_val;
-  int int_val;
-  BaseAST *ast_val;
+    std::string *str_val;
+    int int_val;
+    BaseAST *ast_val;
 }
 
 
@@ -50,8 +50,6 @@ using namespace std;
 %type <str_val> UnaryOP MulOP AddOP RelOP EqOP
 %type <int_val> Number
 
-
-
 %%
 
 // 开始符, CompUnit ::= FuncDef, 大括号后声明了解析完成后 parser 要做的事情
@@ -60,12 +58,12 @@ using namespace std;
 // 此时我们应该把 FuncDef 返回的结果收集起来, 作为 AST 传给调用 parser 的函数
 // $1 指代规则里第一个符号的返回值, 也就是 FuncDef 的返回值
 CompUnit
-  : FuncDef {
-    auto comp_unit = make_unique<CompUnitAST>();
-    comp_unit->func_def = unique_ptr<BaseAST>($1);
-    ast = move(comp_unit);
-  }
-  ;
+    : FuncDef {
+        auto comp_unit = make_unique<CompUnitAST>();
+        comp_unit->func_def = unique_ptr<BaseAST>($1);
+        ast = move(comp_unit);
+    }
+    ;
 
 // FuncDef ::= FuncType IDENT '(' ')' Block;
 // 我们这里可以直接写 '(' 和 ')', 因为之前在 lexer 里已经处理了单个字符的情况
@@ -78,263 +76,260 @@ CompUnit
 // 虽然此处你看不出用 unique_ptr 和手动 delete 的区别, 但当我们定义了 AST 之后
 // 这种写法会省下很多内存管理的负担
 FuncDef
-  : FuncType IDENT '(' ')' Block {
-    auto funcdef = new FuncDefAST();
-    funcdef->func_type = unique_ptr<BaseAST>($1);
-    funcdef->ident = *unique_ptr<string>($2);
-    funcdef->block = unique_ptr<BaseAST>($5);
-    $$ = funcdef;
-  }
-  ;
+    : FuncType IDENT '(' ')' Block {
+        auto funcdef = new FuncDefAST();
+        funcdef->func_type = unique_ptr<BaseAST>($1);
+        funcdef->ident = *unique_ptr<string>($2);
+        funcdef->block = unique_ptr<BaseAST>($5);
+        $$ = funcdef;
+    }
+    ;
 
 // 同上, 不再解释
 FuncType
-  : INT {
-    auto functype=new FuncTypeAST();
-    functype->type="int";
-    $$ = functype;
-  }
-  ;
+    : INT {
+        auto functype = new FuncTypeAST();
+        functype->type = "int";
+        $$ = functype;
+    }
+    ;
 
 Block
-  : '{' Stmt '}' {
-    auto block=new BlockAST();
-    block->stmt=unique_ptr<BaseAST>($2);
-    $$=block;
-  }
-  ;
+    : '{' Stmt '}' {
+        auto block = new BlockAST();
+        block->stmt = unique_ptr<BaseAST>($2);
+        $$ = block;
+    }
+    ;
 
 Stmt
-  : RETURN Exp ';' {
-    auto stmt=new StmtAST();
-    stmt->exp=unique_ptr<BaseAST>($2);
-    $$=stmt;
-  }
-  ;
+    : RETURN Exp ';' {
+        auto stmt = new StmtAST();
+        stmt->exp = unique_ptr<BaseAST>($2);
+        $$ = stmt;
+    }
+    ;
 
 Exp
-  : LOrExp {
-    auto exp=new ExpAST();
-    exp->lor_exp=unique_ptr<BaseAST>($1);
-    $$=exp;
-  }
-  ;
+    : LOrExp {
+        auto exp = new ExpAST();
+        exp->exp = unique_ptr<BaseAST>($1);
+        $$=exp;
+    }
+    ;
 
 PrimaryExp
-  : '(' Exp ')' {
-    auto primary_exp=new PrimaryExpAST();
-    primary_exp->exp=unique_ptr<BaseAST>($2);
-    primary_exp->bnf_type=PrimaryExpType::EXP;
-    $$=primary_exp;
-  }
-  | Number {
-    auto primary_exp=new PrimaryExpAST();
-    primary_exp->number=($1);
-    primary_exp->bnf_type=PrimaryExpType::NUMBER;
-    $$=primary_exp;
-  }
-  ;
+    : '(' Exp ')' {
+        auto primary_exp = new PrimaryExpAST();
+        primary_exp->type = PrimaryExpType::EXP;
+        primary_exp->exp = unique_ptr<BaseAST>($2);
+        $$ = primary_exp;
+    }
+    | Number {
+        auto primary_exp = new PrimaryExpAST();
+        primary_exp->type = PrimaryExpType::NUMBER;
+        primary_exp->num = ($1);
+        $$ = primary_exp;
+    }
+    ;
 
 UnaryExp
-  : PrimaryExp {
-    auto unary_exp=new UnaryExpAST();
-    unary_exp->primary_exp=unique_ptr<BaseAST>($1);
-    unary_exp->bnf_type=UnaryExpType::PRIMARY;
-    $$=unary_exp;
-
-  }
-  | UnaryOP UnaryExp {
-    auto unary_exp=new UnaryExpAST();
-    unary_exp->unary_op=*unique_ptr<string>($1);
-    unary_exp->unary_exp=unique_ptr<BaseAST>($2);
-    unary_exp->bnf_type=UnaryExpType::UNARY;
-    $$=unary_exp;
-  }
-  ;
+    : PrimaryExp {
+        auto unary_exp = new UnaryExpAST();
+        unary_exp->type = UnaryExpType::PRIMARY;
+        unary_exp->primary_exp = unique_ptr<BaseAST>($1);
+        $$ = unary_exp;
+    }
+    | UnaryOP UnaryExp {
+        auto unary_exp = new UnaryExpAST();
+        unary_exp->type = UnaryExpType::UNARY;
+        unary_exp->op = *unique_ptr<string>($1);
+        unary_exp->unary_exp = unique_ptr<BaseAST>($2);
+        $$ = unary_exp;
+    }
+    ;
 
 MulExp
-  : UnaryExp {
-    auto mul_exp=new MulExpAST();
-    mul_exp->bnf_type=BianryOPExpType::INHERIT;
-    mul_exp->unary_exp=unique_ptr<BaseAST>($1);
-    $$=mul_exp;
-  }
-  | MulExp MulOP UnaryExp {
-    auto mul_exp=new MulExpAST();
-    mul_exp->bnf_type=BianryOPExpType::EXPAND;
-    mul_exp->mul_exp=unique_ptr<BaseAST>($1);
-    mul_exp->op=*unique_ptr<string>($2);
-    mul_exp->unary_exp=unique_ptr<BaseAST>($3);
-    $$=mul_exp;
-  }
-  ;
+    : UnaryExp {
+        auto mul_exp = new MulExpAST();
+        mul_exp->type = BianryOPExpType::INHERIT;
+        mul_exp->unary_exp = unique_ptr<BaseAST>($1);
+        $$ = mul_exp;
+    }
+    | MulExp MulOP UnaryExp {
+        auto mul_exp = new MulExpAST();
+        mul_exp->type = BianryOPExpType::EXPAND;
+        mul_exp->mul_exp = unique_ptr<BaseAST>($1);
+        mul_exp->op = *unique_ptr<string>($2);
+        mul_exp->unary_exp = unique_ptr<BaseAST>($3);
+        $$ = mul_exp;
+    }
+    ;
 
 AddExp
-  : MulExp {
-    auto add_exp=new AddExpAST();
-    add_exp->bnf_type=BianryOPExpType::INHERIT;
-    add_exp->mul_exp=unique_ptr<BaseAST>($1);
-    $$=add_exp;
-  }
-  | AddExp AddOP MulExp {
-    auto add_exp=new AddExpAST();
-    add_exp->bnf_type=BianryOPExpType::EXPAND;
-    add_exp->add_exp=unique_ptr<BaseAST>($1);
-    add_exp->op=*unique_ptr<string>($2);
-    add_exp->mul_exp=unique_ptr<BaseAST>($3);
-    $$=add_exp;
-  }
-  ;
+    : MulExp {
+        auto add_exp = new AddExpAST();
+        add_exp->type = BianryOPExpType::INHERIT;
+        add_exp->mul_exp = unique_ptr<BaseAST>($1);
+        $$ = add_exp;
+    }
+    | AddExp AddOP MulExp {
+        auto add_exp = new AddExpAST();
+        add_exp->type = BianryOPExpType::EXPAND;
+        add_exp->add_exp = unique_ptr<BaseAST>($1);
+        add_exp->op = *unique_ptr<string>($2);
+        add_exp->mul_exp = unique_ptr<BaseAST>($3);
+        $$ = add_exp;
+    }
+    ;
 
 RelExp
-  : AddExp {
-    auto rel_exp=new RelExpAST();
-    rel_exp->bnf_type=BianryOPExpType::INHERIT;
-    rel_exp->add_exp=unique_ptr<BaseAST>($1);
-    $$=rel_exp;
-  }
-  | RelExp RelOP AddExp {
-    auto rel_exp=new RelExpAST();
-    rel_exp->bnf_type=BianryOPExpType::EXPAND;
-    rel_exp->rel_exp=unique_ptr<BaseAST>($1);
-    rel_exp->op=*unique_ptr<string>($2);
-    rel_exp->add_exp=unique_ptr<BaseAST>($3);
-    $$=rel_exp;
-  }
-  ;
+    : AddExp {
+        auto rel_exp = new RelExpAST();
+        rel_exp->type = BianryOPExpType::INHERIT;
+        rel_exp->add_exp = unique_ptr<BaseAST>($1);
+        $$ = rel_exp;
+    }
+    | RelExp RelOP AddExp {
+        auto rel_exp = new RelExpAST();
+        rel_exp->type = BianryOPExpType::EXPAND;
+        rel_exp->rel_exp = unique_ptr<BaseAST>($1);
+        rel_exp->op = *unique_ptr<string>($2);
+        rel_exp->add_exp = unique_ptr<BaseAST>($3);
+        $$ = rel_exp;
+    }
+    ;
 
 EqExp
-  : RelExp {
-    auto eq_exp=new EqExpAST();
-    eq_exp->bnf_type=BianryOPExpType::INHERIT;
-    eq_exp->rel_exp=unique_ptr<BaseAST>($1);
-    $$=eq_exp;
-  }
-  | EqExp EqOP RelExp {
-    auto eq_exp=new EqExpAST();
-    eq_exp->bnf_type=BianryOPExpType::EXPAND;
-    eq_exp->eq_exp=unique_ptr<BaseAST>($1);
-    eq_exp->op=*unique_ptr<string>($2);
-    eq_exp->rel_exp=unique_ptr<BaseAST>($3);
-    $$=eq_exp;
-  }
-  ;
+    : RelExp {
+        auto eq_exp = new EqExpAST();
+        eq_exp->type = BianryOPExpType::INHERIT;
+        eq_exp->rel_exp = unique_ptr<BaseAST>($1);
+        $$ = eq_exp;
+    }
+    | EqExp EqOP RelExp {
+        auto eq_exp = new EqExpAST();
+        eq_exp->type = BianryOPExpType::EXPAND;
+        eq_exp->eq_exp = unique_ptr<BaseAST>($1);
+        eq_exp->op = *unique_ptr<string>($2);
+        eq_exp->rel_exp = unique_ptr<BaseAST>($3);
+        $$ = eq_exp;
+    }
+    ;
 
 LAndExp
-  : EqExp {
-    auto land_exp=new LAndExpAST();
-    land_exp->bnf_type=BianryOPExpType::INHERIT;
-    land_exp->eq_exp=unique_ptr<BaseAST>($1);
-    $$=land_exp;
-  }
-  | LAndExp AND EqExp {
-    auto land_exp=new LAndExpAST();
-    land_exp->bnf_type=BianryOPExpType::EXPAND;
-    land_exp->land_exp=unique_ptr<BaseAST>($1);
-    land_exp->eq_exp=unique_ptr<BaseAST>($3);
-    $$=land_exp;
-  }
-  ;
+    : EqExp {
+        auto land_exp = new LAndExpAST();
+        land_exp->type = BianryOPExpType::INHERIT;
+        land_exp->eq_exp = unique_ptr<BaseAST>($1);
+        $$ = land_exp;
+    }
+    | LAndExp AND EqExp {
+        auto land_exp = new LAndExpAST();
+        land_exp->type = BianryOPExpType::EXPAND;
+        land_exp->land_exp = unique_ptr<BaseAST>($1);
+        land_exp->eq_exp = unique_ptr<BaseAST>($3);
+        $$ = land_exp;
+    }
+    ;
 
 LOrExp
-  : LAndExp {
-    auto lor_exp=new LOrExpAST();
-    lor_exp->bnf_type=BianryOPExpType::INHERIT;
-    lor_exp->land_exp=unique_ptr<BaseAST>($1);
-    $$=lor_exp;
-  }
-  | LOrExp OR LAndExp {
-    auto lor_exp=new LOrExpAST();
-    lor_exp->bnf_type=BianryOPExpType::EXPAND;
-    lor_exp->lor_exp=unique_ptr<BaseAST>($1);
-    lor_exp->land_exp=unique_ptr<BaseAST>($3);
-    $$=lor_exp;
-  }
-  ;
+    : LAndExp {
+        auto lor_exp = new LOrExpAST();
+        lor_exp->type = BianryOPExpType::INHERIT;
+        lor_exp->land_exp = unique_ptr<BaseAST>($1);
+        $$ = lor_exp;
+    }
+    | LOrExp OR LAndExp {
+        auto lor_exp = new LOrExpAST();
+        lor_exp->type = BianryOPExpType::EXPAND;
+        lor_exp->lor_exp = unique_ptr<BaseAST>($1);
+        lor_exp->land_exp = unique_ptr<BaseAST>($3);
+        $$ = lor_exp;
+    }
+    ;
 
 UnaryOP
-  : '+' {
-      string *op = new string("+");
-      $$ = op;
-  }
-  | '-' {
-      string *op = new string("-");
-      $$ = op;
-  }
-  | '!' {
-      string *op = new string("!");
-      $$ = op;
-  }
-  ;
+    : '+' {
+        string *op = new string("+");
+        $$ = op;
+    }
+    | '-' {
+        string *op = new string("-");
+        $$ = op;
+    }
+    | '!' {
+        string *op = new string("!");
+        $$ = op;
+    }
+    ;
 
 MulOP
-  : '*' {
-      string *op = new string("*");
-      $$ = op;
-  }
-  | '/' {
-      string *op = new string("/");
-      $$ = op;
-  }
-  | '%' {
-      string *op = new string("%");
-      $$ = op;
-  }
-  ;
+    : '*' {
+        string *op = new string("*");
+        $$ = op;
+    }
+    | '/' {
+        string *op = new string("/");
+        $$ = op;
+    }
+    | '%' {
+        string *op = new string("%");
+        $$ = op;
+    }
+    ;
 
 AddOP
-  : '+' {
-      string *op = new string("+");
-      $$ = op;
-  }
-  | '-' {
-      string *op = new string("-");
-      $$ = op;
-  }
-  ;
+    : '+' {
+        string *op = new string("+");
+        $$ = op;
+    }
+    | '-' {
+        string *op = new string("-");
+        $$ = op;
+    }
+    ;
 
 RelOP
-  : '<' {
-      string *op = new string("<");
-      $$ = op;
-  }
-  | '>' {
-      string *op = new string(">");
-      $$ = op;
-  }
-  | LE {
-      string *op = new string("<=");
-      $$ = op;
-  }
-  | GE {
-      string *op = new string(">=");
-      $$ = op;
-  }
-  ;
+    : '<' {
+        string *op = new string("<");
+        $$ = op;
+    }
+    | '>' {
+        string *op = new string(">");
+        $$ = op;
+    }
+    | LE {
+        string *op = new string("<=");
+        $$ = op;
+    }
+    | GE {
+        string *op = new string(">=");
+        $$ = op;
+    }
+    ;
 
 EqOP
-  : EQ {
-      string *op = new string("==");
-      $$ = op;
-  }
-  | NEQ {
-      string *op = new string("!=");
-      $$ = op;
-  }
-  ;
-
+    : EQ {
+        string *op = new string("==");
+        $$ = op;
+    }
+    | NEQ {
+        string *op = new string("!=");
+        $$ = op;
+    }
+    ;
 
 Number
-  : INT_CONST {
-    $$=($1);
-  }
-  ;
-
+    : INT_CONST {
+        $$ = ($1);
+    }
+    ;
 
 %%
 
 // 定义错误处理函数, 其中第二个参数是错误信息
 // parser 如果发生错误 (例如输入的程序出现了语法错误), 就会调用这个函数
 void yyerror(unique_ptr<BaseAST> &ast, const char *s) {
-  cerr << "error: " << s << endl;
+    cerr << "error: " << s << endl;
 }
