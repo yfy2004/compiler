@@ -5,13 +5,20 @@
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <vector>
+#include "table.h"
 
 class BaseAST;
+class VecAST;
+class ExpVecAST;
+class BaseExpAST;
 class CompUnitAST;
 class FuncDefAST;
-class FuncTypeAST;
 class BlockAST;
 class StmtAST;
+class OpenStmtAST;
+class ClosedStmtAST;
+class SimpleStmtAST;
 
 class ExpAST;
 class PrimaryExpAST;
@@ -23,36 +30,99 @@ class EqExpAST;
 class LAndExpAST;
 class LOrExpAST;
 
-enum PrimaryExpType{EXP, NUMBER};
-enum UnaryExpType{PRIMARY, UNARY};
+class DeclAST;
+class ConstDeclAST;
+class TypeAST;
+class ConstDefAST;
+class ConstInitValAST;
+class BlockItemAST;
+class LValAST;
+class ConstExpAST;
+class VarDeclAST;
+class VarDefAST;
+class InitVal;
+
+class FuncFParamAST;
+
+enum PrimaryExpType{EXP, NUMBER, LVAL};
+enum UnaryExpType{PRIMARY, UNARY, CALL};
 enum BianryOPExpType{INHERIT, EXPAND};
+enum DeclType{CONST_DECL, VAR_DECL};
+enum VarDefType{VAR, VAR_ASSIGN};
+enum BlockItemType{BLK_DECL, BLK_STMT};
+enum StmtType{STMT_OPEN, STMT_CLOSED};
+enum OpenStmtType{OSTMT_CLOSED, OSTMT_OPEN, OSTMT_ELSE, OSTMT_WHILE};
+enum ClosedStmtType{CSTMT_SIMPLE, CSTMT_ELSE, CSTMT_WHILE};
+enum SimpleStmtType{SSTMT_ASSIGN, SSTMT_EMPTY_RET, SSTMT_RETURN, SSTMT_EMPTY_EXP, SSTMT_EXP, SSTMT_BLK, SSTMT_BREAK,SSTMT_CONTINUE};
 
 static int symbol_count = 0;
-static std::string get_IR(std::string str);
-static std::string get_var(std::string str);
+static int label_count = 0;
 static std::map<std::string, std::string> names = {{"!=", "ne"}, {"==", "eq"}, {">", "gt"}, {"<", "lt"}, {">=", "ge"}, {"<=", "le"}, {"+", "add"}, {"-", "sub"}, {"*", "mul"}, {"/", "div"}, {"%", "mod"}, {"&&", "and"}, {"||", "or"}};
+static bool is_ret = false;
+static int alloc_tmp = 0;
+static std::vector<int> while_stack;
+static std::string current_func;
 
 class BaseAST
 {
 public:
+    std::string ident = "";
+    bool is_global = false;
+    virtual void DumpIR() = 0;
     virtual ~BaseAST() = default;
-    virtual void Dump() const = 0;
-    virtual std::string DumpIR() const = 0;
+};
+
+class VecAST
+{
+public:
+    std::vector<std::unique_ptr<BaseAST> > vec;
+    void push_back(std::unique_ptr<BaseAST> &ast)
+    {
+        vec.push_back(std::move(ast));
+    }
+};
+
+class ExpVecAST
+{
+public:
+    std::vector<std::unique_ptr<BaseExpAST> > vec;
+    void push_back(std::unique_ptr<BaseExpAST> &ast)
+    {
+        vec.push_back(std::move(ast));
+    }
+};
+
+class BaseExpAST: public BaseAST
+{
+public:
+    virtual void Eval() = 0;
+    int value = -1;
+    bool is_const = false;
+    bool is_evaled = false;
+    bool is_left = false;
+    void Copy(std::unique_ptr<BaseExpAST>& exp)
+    {
+        value = exp->value;
+        ident = exp->ident;
+        is_const = exp->is_const;
+        is_evaled = exp->is_evaled;
+    }
 };
 
 class CompUnitAST : public BaseAST
 {
 public:
-    std::unique_ptr<BaseAST> func_def;
-    void Dump() const override
-    {
-        std::cout << "CompUnitAST {";
-        func_def->Dump();
-        std::cout << "}\n";
-    }
-    std::string DumpIR() const override
+    std::unique_ptr<VecAST> comp_units;
+    void DumpIR() override
     { 
-        return func_def->DumpIR();
+        symbol_table_stack.PushScope();
+        initSysyRuntimeLib();
+        for(auto &item:comp_units->vec)
+        {
+            item->is_global = true;
+            item->DumpIR();
+        }
+        symbol_table_stack.PopScope();
     }
 };
 
@@ -60,511 +130,1108 @@ class FuncDefAST : public BaseAST
 {
 public:
     std::unique_ptr<BaseAST> func_type;
-    std::string ident;
     std::unique_ptr<BaseAST> block;
-    void Dump() const override
+    std::unique_ptr<VecAST> func_fparams;
+    void DumpIR() override
     {
-        std::cout << "FuncDefAST {";
-        func_type->Dump();
-        std::cout << ", " << ident << ", ";
-        block->Dump();
-        std::cout << "}";
-    }
-    std::string DumpIR() const override
-    {
-        return "fun @" + ident+ "(): " + func_type->DumpIR() + " {\n" + block->DumpIR() + "\n}\n";
+        current_func = ident;
+        func_type->DumpIR();
+        symbol_count = 0;
+        assert(func_map.find(ident) == func_map.end());
+        func_map[ident] = func_type->ident;
+        symbol_table_stack.PushScope();
+        std::vector<std::string> params;
+        std::cout << "fun @" << ident << "(";
+        int count = 0;
+        for(auto &param: func_fparams->vec)
+        {
+            if(count != 0)
+            {
+                std::cout << ", ";
+            }
+            param->DumpIR();
+            params.push_back(param->ident);
+            count++;
+        }
+        std::cout << ")";
+        if (func_type->ident == "i32")
+        {
+            std::cout << ": " << func_type->ident;
+        }
+        std::cout << " {" << std::endl;
+        std::cout << "%entry_" << ident << ":" << std::endl;
+        for(auto& param: params)
+        {
+            symbol_table_stack.Insert(param, "%" + param);
+            symbol_info_t* info = symbol_table_stack.LookUp(param);
+            std::cout << "  " << info->ir_name << " = alloc i32" << std::endl;
+            std::cout << "  store @" << param << ", " << info->ir_name << std::endl;
+        }
+        block->DumpIR();
+        if (is_ret == false)
+        {
+            if (func_type->ident == "i32")
+            {
+                std::cout << "  ret 0" << std::endl;
+            }
+            else if(func_type->ident == "void")
+                std::cout << "  ret" << std::endl;
+        }
+        std::cout << "}" << std::endl;
+        symbol_table_stack.PopScope();
+        is_ret = false;
     }
 };
 
-class FuncTypeAST : public BaseAST
+class TypeAST : public BaseAST
 {
 public:
     std::string type;
-    void Dump() const override
-    {
-        std::cout << "FuncTypeAST {";
-        std::cout << type;
-        std::cout << "}";
-    }
-    std::string DumpIR() const override
-    {
-        return "i32";
+    void DumpIR() override
+    {   
+        if (type == "int")
+        {
+            ident = "i32";
+        }
+        else if (type == "void")
+        {
+            ident="void";
+        }
+        else
+        {
+            assert(false);
+        }
     }
 };
 
 class BlockAST : public BaseAST
 {
 public:
-    std::unique_ptr<BaseAST> stmt;
-    void Dump() const override
+    std::unique_ptr<VecAST> items;
+    void DumpIR() override
     {
-        std::cout << "BlockAST {";
-        stmt->Dump();
-        std::cout << "}";
-    }
-    std::string DumpIR() const override
-    {
-        return "%entry:\n  " + stmt->DumpIR() + "\n";
+        for(auto &item:items->vec)
+        {  
+            if (is_ret == true)
+            {
+               break;
+            }
+            item->DumpIR();
+        }
     }
 };
 
 class StmtAST : public BaseAST
 {
 public:
-    std::unique_ptr<BaseAST> exp;
-    void Dump() const override
+    StmtType type;
+    std::unique_ptr<BaseAST> open_stmt;
+    std::unique_ptr<BaseAST> closed_stmt;
+    void DumpIR() override
     {
-        std::cout << "StmtAST {";
-        exp->Dump();
-        std::cout << "}";
-    }
-    std::string DumpIR() const override
-    {
-        std::string ans = exp->DumpIR();
-        return get_IR(ans) + " ret " + get_var(ans);
+        if (type == StmtType::STMT_CLOSED)
+        {
+            closed_stmt->DumpIR();
+        }
+        else if(type == StmtType::STMT_OPEN)
+        {
+            open_stmt->DumpIR();
+        }
+        else
+        {
+            assert(false);
+        }
     }
 };
 
-class ExpAST : public BaseAST
+class OpenStmtAST: public BaseAST
 {
 public:
-    std::unique_ptr<BaseAST> exp;
-    void Dump() const override
+    OpenStmtType type;
+    std::unique_ptr<BaseExpAST> exp;
+    std::unique_ptr<BaseAST> open_stmt;
+    std::unique_ptr<BaseAST> closed_stmt;
+    void DumpIR() override
     {
-        std::cout << "ExpAST {";
-        exp->Dump();
-        std::cout << "}";
-    }
-    std::string DumpIR() const override
-    {
-        return exp->DumpIR();
+        std::string lable_then = "%then_" + std::to_string(label_count);
+        std::string lable_else = "%else_" + std::to_string(label_count);
+        std::string lable_end = "%end_" + std::to_string(label_count);
+        std::string lable_while_entry = "%while_entry_" + std::to_string(label_count);
+        std::string lable_while_body = "%while_body_" + std::to_string(label_count++);
+        if (type == OpenStmtType::OSTMT_CLOSED)
+        {
+            exp->Eval();
+            std::cout << "  br " << exp->ident << ", " << lable_then << ", " << lable_end << std::endl << std::endl;
+            std::cout << lable_then << ":" << std::endl;
+            is_ret = false;
+            closed_stmt->DumpIR();
+            if (is_ret == false)
+            {
+                std::cout << "  jump " << lable_end << std::endl;
+            }
+            std::cout << std::endl;
+            std::cout << lable_end << ":" << std::endl;
+            is_ret = false;
+        }
+        else if (type == OpenStmtType::OSTMT_OPEN)
+        {
+            exp->Eval();
+            std::cout << "  br " << exp->ident << ", " << lable_then << ", " << lable_end << std::endl << std::endl;
+            std::cout << lable_then << ":" << std::endl;
+            is_ret = false;
+            open_stmt->DumpIR();
+            if (is_ret == false)
+            {
+                std::cout << "  jump " << lable_end << std::endl;
+            }
+            std::cout << std::endl;
+            std::cout << lable_end << ":" << std::endl;
+            is_ret = false;
+        }
+        else if(type == OpenStmtType::OSTMT_ELSE)
+        {
+            bool total_ret = true;
+            exp->Eval();
+            std::cout << "  br " << exp->ident << ", " << lable_then << ", " << lable_else << std::endl << std::endl;
+            std::cout << lable_then << ":" << std::endl;
+            is_ret = false;
+            closed_stmt->DumpIR();
+            total_ret = total_ret & is_ret;
+            if (is_ret == false)
+            {
+                std::cout << "  jump " << lable_end << std::endl;
+            }
+            std::cout << std::endl;
+            std::cout << lable_else << ":" << std::endl;
+            is_ret = false;
+            open_stmt->DumpIR();
+            total_ret = total_ret & is_ret;
+            if (is_ret == false)
+            {
+                std::cout << "  jump " << lable_end << std::endl;
+            }
+            std::cout << std::endl;
+            if (total_ret == false)
+            {
+                std::cout << lable_end << ":" << std::endl;
+            }
+            is_ret = total_ret;
+        }
+        else if(type == OpenStmtType::OSTMT_WHILE)
+        {
+            while_stack.push_back(label_count - 1);
+            std::cout << "  jump " << lable_while_entry << std::endl << std::endl;
+            std::cout << lable_while_entry << ":" << std::endl;
+            exp->Eval();
+            std::cout << "  br " << exp->ident << ", " << lable_while_body << ", " << lable_end << std::endl << std::endl;
+            std::cout << lable_while_body << ":" << std::endl;
+            is_ret = false;
+            open_stmt->DumpIR();
+            if (is_ret == false)
+            {
+                std::cout << "  jump " << lable_while_entry << std::endl;
+            }
+            std::cout << std::endl;
+            std::cout << lable_end<<":" << std::endl;
+            is_ret = false;
+            while_stack.pop_back();
+        }
+        else
+        {
+            assert(false);
+        }
     }
 };
 
-class PrimaryExpAST : public BaseAST
+class ClosedStmtAST: public BaseAST
+{
+public:
+    ClosedStmtType type;
+    std::unique_ptr<BaseExpAST> exp;
+    std::unique_ptr<BaseAST> closed_stmt1;
+    std::unique_ptr<BaseAST> closed_stmt2;
+    std::unique_ptr<BaseAST> simple_stmt;
+    void DumpIR() override
+    {
+        if (type == ClosedStmtType::CSTMT_SIMPLE)
+        {
+            simple_stmt->DumpIR();
+        }
+        else if(type == ClosedStmtType::CSTMT_ELSE)
+        {
+            std::string lable_then = "%then_" + std::to_string(label_count);
+            std::string lable_else = "%else_" + std::to_string(label_count);
+            std::string lable_end = "%end_" + std::to_string(label_count++);
+            bool total_ret = true;
+            exp->Eval();
+            std::cout << "  br " << exp->ident << ", " << lable_then << ", " << lable_else << std::endl << std::endl;
+            std::cout << lable_then << ":" << std::endl;
+            is_ret = false;
+            closed_stmt1->DumpIR();
+            total_ret = total_ret & is_ret;
+            if (is_ret == false)
+            {
+                std::cout << "  jump " << lable_end << std::endl;
+            }
+            std::cout << std::endl;
+            std::cout << lable_else << ":" << std::endl;
+            is_ret = false;
+            closed_stmt2->DumpIR();
+            total_ret = total_ret & is_ret;
+            if (is_ret == false)
+            {
+                std::cout << "  jump " << lable_end << std::endl;
+            }
+            std::cout << std::endl;
+            if (total_ret == false)
+            {
+                std::cout << lable_end << ":" << std::endl;
+            }
+            is_ret = total_ret;
+        }
+        else if(type == ClosedStmtType::CSTMT_WHILE)
+        {
+            std::string lable_end = "%end_" + std::to_string(label_count);
+            std::string lable_while_entry = "%while_entry_" + std::to_string(label_count);
+            std::string lable_while_body = "%while_body_" + std::to_string(label_count);
+            while_stack.push_back(label_count++);
+            std::cout << "  jump " << lable_while_entry << std::endl << std::endl;
+            std::cout << lable_while_entry << ":" << std::endl;
+            exp->Eval();
+            std::cout << "  br " << exp->ident << ", " << lable_while_body << ", " << lable_end << std::endl << std::endl;
+            std::cout << lable_while_body << ":" << std::endl;
+            is_ret = false;
+            closed_stmt1->DumpIR();
+            if (is_ret == false)
+            {
+                std::cout << "  jump " << lable_while_entry << std::endl;
+            }
+            std::cout << std::endl;
+            std::cout << lable_end << ":" << std::endl;
+            is_ret = false;
+            while_stack.pop_back();
+        }
+        else
+        {
+            assert(false);
+        }
+    }
+};
+
+class SimpleStmtAST : public BaseAST
+{
+public:
+    SimpleStmtType type;
+    std::unique_ptr<BaseExpAST> lval;
+    std::unique_ptr<BaseExpAST> exp;
+    std::unique_ptr<BaseAST> block;
+    void DumpIR() override
+    {
+        if (type == SimpleStmtType::SSTMT_RETURN)
+        {
+            exp->Eval();
+            std::cout << "  ret " << exp->ident << std::endl;
+            is_ret = true;
+        }
+        else if(type == SimpleStmtType::SSTMT_EMPTY_RET)
+        {
+            std::string ret_type = func_map[current_func];
+            if (ret_type == "i32")
+            {
+                std::cout << "  ret 0" << std::endl;
+            }
+            else
+            {
+                std::cout << "  ret" << std::endl;
+            }
+            is_ret = true;
+        }
+        else if (type == SimpleStmtType::SSTMT_ASSIGN)
+        {
+            exp->Eval();
+            lval->is_left = true;
+            lval->Eval();
+            assert(!lval->is_const);
+            exp->DumpIR();
+            symbol_info_t *info = symbol_table_stack.LookUp(lval->ident);
+            std::cout << "  store " << exp->ident << ", " << info->ir_name << std::endl;
+        }
+        else if(type == SimpleStmtType::SSTMT_BLK)
+        {
+            symbol_table_stack.PushScope();
+            block->DumpIR();
+            symbol_table_stack.PopScope();
+        }
+        else if(type == SimpleStmtType::SSTMT_EMPTY_EXP)
+        {
+        }
+        else if (type == SimpleStmtType::SSTMT_EXP)
+        {
+            exp->Eval();
+            exp->DumpIR();
+        }
+        else if(type == SimpleStmtType::SSTMT_BREAK)
+        {
+            assert(!while_stack.empty());
+            int label_num = while_stack.back();
+            std::cout << "  jump %end_" << std::to_string(label_num) << std::endl << std::endl;
+            is_ret = true;
+        }
+        else if(type == SimpleStmtType::SSTMT_CONTINUE)
+        {
+            assert(!while_stack.empty());
+            int label_num = while_stack.back();
+            std::cout << "  jump %while_entry_" << std::to_string(label_num) << std::endl << std::endl;
+            is_ret = true;
+        }
+        else
+        {
+            assert(false);
+        }
+    }
+};
+
+class ExpAST : public BaseExpAST
+{
+public:
+    std::unique_ptr<BaseExpAST> exp;
+    void DumpIR() override
+    {
+        exp->DumpIR();
+    }
+    void Eval() override
+    {
+        if (is_evaled)
+        {
+            return;
+        }
+        exp->Eval();
+        Copy(exp);
+        is_evaled = true;
+    }
+};
+
+class PrimaryExpAST : public BaseExpAST
 {
 public:
     PrimaryExpType type;
     int num;
-    std::unique_ptr<BaseAST> exp;
-    void Dump() const override
+    std::unique_ptr<BaseExpAST> exp;
+    std::unique_ptr<BaseExpAST> lval;
+    void DumpIR() override
     {
-        std::cout << "PrimaryExpAST {";
+    }
+    void Eval() override
+    {
+        if (is_evaled)
+        {
+            return;
+        }
         if (type == PrimaryExpType::EXP)
         {
-            exp->Dump();
+            exp->Eval();
+            Copy(exp);
         }
         else if (type == PrimaryExpType::NUMBER)
         {
-            std::cout << num;
+            value = num;
+            is_const = true;
+            ident = std::to_string(value);
+        }
+        else if(type == PrimaryExpType::LVAL)
+        {
+            lval->Eval();
+            Copy(lval);
         }
         else
         {
             assert(false);
         }
-        std::cout << "}";
-    }
-    std::string DumpIR() const override
-    {
-        if (type == PrimaryExpType::EXP)
-        {
-            return exp->DumpIR();
-        }
-        else if (type == PrimaryExpType::NUMBER)
-        {
-            return std::to_string(num);
-        }
-        else
-        {
-            return "";
-        }
+        is_evaled=true;
     }
 };
 
-class UnaryExpAST : public BaseAST
+class UnaryExpAST : public BaseExpAST
 {
 public:
     UnaryExpType type;
-    std::unique_ptr<BaseAST> unary_exp;
-    std::unique_ptr<BaseAST> primary_exp;
+    std::unique_ptr<BaseExpAST> unary_exp;
+    std::unique_ptr<BaseExpAST> primary_exp;
+    std::unique_ptr<ExpVecAST> func_rparams;
     std::string op;
-    void Dump() const override
+    std::string func_name;
+    void DumpIR() override
     {
-        std::cout << "UnaryExpAST {";
+    }
+    void Eval() override
+    {
+        if(is_evaled)
+        {
+            return;
+        }
         if (type == UnaryExpType::PRIMARY)
         {
-            primary_exp->Dump();
+            primary_exp->Eval();
+            Copy(primary_exp);
         }
         else if (type == UnaryExpType::UNARY)
         {
-            std::cout << op;
-            unary_exp->Dump();
-        }
-        else
-        {
-            assert(false);
-        }
-        std::cout << "}";
-    }
-    std::string DumpIR() const override
-    {
-        std::string ans = "";
-        if (type == UnaryExpType::PRIMARY)
-        {
-            ans = primary_exp->DumpIR();
-        }
-        else if (type == UnaryExpType::UNARY)
-        {
-            std::string unary_IR = unary_exp->DumpIR();
-            std::string IR = get_IR(unary_IR);
-            std::string var = get_var(unary_IR);
-            if (op == "+")
+            unary_exp->Eval();
+            Copy(unary_exp);
+            if (unary_exp->is_const)
             {
-                ans = unary_IR;
+                if (op == "+")
+                {
+                    value = unary_exp->value;
+                }
+                else if (op == "-")
+                {
+                    value = -unary_exp->value;
+                }
+                else if (op == "!")
+                {
+                    value = !unary_exp->value;
+                }
+                else
+                {
+                    assert(false);
+                }
+                ident = std::to_string(value);
             }
-            else if (op == "-")
+            else
+            {   
+                if (op == "-")
+                {
+                    ident = "%" + std::to_string(symbol_count++);
+                    std::cout << "  " << ident << " = sub 0, " << unary_exp->ident << std::endl;
+                }
+                else if (op == "!")
+                {
+                    ident = "%" + std::to_string(symbol_count++);
+                    std::cout << "  " << ident << " = eq " << unary_exp->ident << ", 0" << std::endl;
+                }
+            }
+            is_evaled = true;
+        }
+        else if(type == UnaryExpType::CALL)
+        {
+            for (auto &param: func_rparams->vec)
             {
-                ans = "%" + std::to_string(symbol_count) + "\n" + IR + "  %" + std::to_string(symbol_count) + " = sub 0, " + var + "\n";
-                symbol_count++;
+                param->Eval();
             }
-            else if (op == "!")
+            assert(func_map.find(func_name) != func_map.end());
+            std::string ret_type = func_map[func_name];
+            if (ret_type == "i32")
             {
-                ans = "%" + std::to_string(symbol_count) + "\n" + IR + "  %" + std::to_string(symbol_count) + " = eq " + var + ", 0\n";
-                symbol_count++;
+                ident = "%" + std::to_string(symbol_count++);
+                std::cout << "  " << ident << " = ";
+            }
+            else if (ret_type == "void")
+            {
+                std::cout << "  ";
+            }
+            else
+            {
+                assert(false);
+            }
+            std::cout << "call @" << func_name << "(";
+            int count = 0;
+            for (auto &param : func_rparams->vec)
+            {
+                if (count != 0)
+                {
+                    std::cout << ", ";
+                }
+                std::cout << param->ident;
+                count++;
+            }
+            std::cout << ")" << std::endl;
+        }
+    }
+};
+
+class MulExpAST : public BaseExpAST
+{
+public:
+    BianryOPExpType type;
+    std::unique_ptr<BaseExpAST> mul_exp;
+    std::unique_ptr<BaseExpAST> unary_exp;
+    std::string op;
+    void DumpIR() override
+    {
+    }
+    void Eval() override
+    {
+        if (is_evaled)
+        {
+            return;
+        }
+        if (type == BianryOPExpType::INHERIT)
+        {
+            unary_exp->Eval();
+            Copy(unary_exp);
+        }
+        else if (type == BianryOPExpType::EXPAND)
+        {
+            mul_exp->Eval();
+            unary_exp->Eval();
+            is_const = mul_exp->is_const && unary_exp->is_const;
+            if (is_const)
+            {
+                int val1 = mul_exp->value;
+                int val2 = unary_exp->value;
+                if (op == "*")
+                    value = val1 * val2;
+                else if (op == "/")
+                    value = val1 / val2;
+                else if (op == "%")
+                    value = val1 % val2;
+                else
+                {
+                    assert(false);
+                }
+                ident = std::to_string(value);
+            }
+            else
+            {
+                ident = "%" + std::to_string(symbol_count++);
+                std::cout << "  " << ident << " = " << names[op] << " " << mul_exp->ident << ", " << unary_exp->ident << std::endl;
             }
         }
-        return ans;
+        else
+        {
+            assert(false);
+        }
+        is_evaled = true;
     }
 };
 
-class MulExpAST : public BaseAST
+class AddExpAST : public BaseExpAST
 {
 public:
     BianryOPExpType type;
-    std::unique_ptr<BaseAST> mul_exp;
-    std::unique_ptr<BaseAST> unary_exp;
+    std::unique_ptr<BaseExpAST> add_exp;
+    std::unique_ptr<BaseExpAST> mul_exp;
     std::string op;
-    void Dump() const override
+    void DumpIR() override
     {
-        std::cout << "MulExpAST {";
-        if (type == BianryOPExpType::INHERIT)
-        {
-            unary_exp->Dump();
-        }
-        else if (type == BianryOPExpType::EXPAND)
-        {
-            mul_exp->Dump();
-            std::cout << " " << op << " ";
-            unary_exp->Dump();
-        }
-        else
-        {
-            assert(false);
-        }
-        std::cout << "}";
     }
-    std::string DumpIR() const override
+    void Eval() override
     {
-        std::string ans = "";
+        if (is_evaled)
+        {
+            return;
+        }
         if (type == BianryOPExpType::INHERIT)
         {
-            ans = unary_exp->DumpIR();
+            mul_exp->Eval();
+            Copy(mul_exp);
         }
         else if (type == BianryOPExpType::EXPAND)
         {
-            std::string lhs = mul_exp->DumpIR();
-            std::string lhs_IR = get_IR(lhs);
-            std::string lhs_var = get_var(lhs);
-            std::string rhs = unary_exp->DumpIR();
-            std::string rhs_IR = get_IR(rhs);
-            std::string rhs_var = get_var(rhs);
-            std::string var = "%" + std::to_string(symbol_count++);
-            ans = var + "\n" + lhs_IR + rhs_IR + "  " + var + " = " + names[op] + " " + lhs_var + ", " + rhs_var + "\n";
+            add_exp->Eval();
+            mul_exp->Eval();
+            is_const = add_exp->is_const && mul_exp->is_const;
+            if (is_const)
+            {
+                int val1 = add_exp->value;
+                int val2 = mul_exp->value;
+                if (op == "+")
+                    value = val1 + val2;
+                else if (op=="-")
+                    value = val1 - val2;
+                else
+                {
+                    assert(false);
+                }
+                ident = std::to_string(value);
+            }
+            else
+            {
+                ident = "%" + std::to_string(symbol_count++);
+                std::cout << "  " << ident << " = " << names[op] << " " << add_exp->ident << ", " << mul_exp->ident << std::endl;
+            }
         }
         else
         {
             assert(false);
         }
-        return ans;
+        is_evaled = true;
     }
 };
 
-class AddExpAST : public BaseAST
+class RelExpAST : public BaseExpAST
 {
 public:
     BianryOPExpType type;
-    std::unique_ptr<BaseAST> add_exp;
-    std::unique_ptr<BaseAST> mul_exp;
+    std::unique_ptr<BaseExpAST> rel_exp;
+    std::unique_ptr<BaseExpAST> add_exp;
     std::string op;
-    void Dump() const override
+    void DumpIR() override
     {
-        std::cout << "AddExpAST {";
-        if (type == BianryOPExpType::INHERIT)
-        {
-            mul_exp->Dump();
-        }
-        else if (type == BianryOPExpType::EXPAND)
-        {
-            add_exp->Dump();
-            std::cout << " " << op << " ";
-            mul_exp->Dump();
-        }
-        else
-        {
-            assert(false);
-        }
-        std::cout << "}";
     }
-    std::string DumpIR() const override
+    void Eval() override
     {
-        std::string ans = "";
+        if (is_evaled)
+        {
+            return;
+        }
         if (type == BianryOPExpType::INHERIT)
         {
-            ans = mul_exp->DumpIR();
+            add_exp->Eval();
+            Copy(add_exp);
         }
         else if (type == BianryOPExpType::EXPAND)
         {
-            std::string lhs = add_exp->DumpIR();
-            std::string lhs_IR = get_IR(lhs);
-            std::string lhs_var = get_var(lhs);
-            std::string rhs = mul_exp->DumpIR();
-            std::string rhs_IR = get_IR(rhs);
-            std::string rhs_var = get_var(rhs);
-            std::string var = "%" + std::to_string(symbol_count++);
-            ans = var + "\n" + lhs_IR + rhs_IR + "  " + var + " = " + names[op] + " " + lhs_var + ", " + rhs_var + "\n";
+            rel_exp->Eval();
+            add_exp->Eval();
+            is_const = rel_exp->is_const && add_exp->is_const;
+            if (is_const)
+            {
+                int val1 = rel_exp->value;
+                int val2 = add_exp->value;
+                if (op == "<")
+                    value = (val1 < val2);
+                else if (op == ">")
+                    value = (val1 > val2);
+                else if (op == "<=")
+                    value = (val1 <= val2);
+                else if (op == ">=")
+                    value = (val1 >= val2);
+                else
+                {
+                    assert(false);
+                }
+                ident = std::to_string(value);
+            }
+            else{
+                ident = "%" + std::to_string(symbol_count++);
+                std::cout << "  " << ident << " = " << names[op] << " " << rel_exp->ident << ", " << add_exp->ident << std::endl;
+            }
         }
         else
         {
             assert(false);
         }
-        return ans;
+        is_evaled = true;
     }
 };
 
-class RelExpAST : public BaseAST
+class EqExpAST : public BaseExpAST
 {
 public:
     BianryOPExpType type;
-    std::unique_ptr<BaseAST> rel_exp;
-    std::unique_ptr<BaseAST> add_exp;
+    std::unique_ptr<BaseExpAST> eq_exp;
+    std::unique_ptr<BaseExpAST> rel_exp;
     std::string op;
-    void Dump() const override
+    void DumpIR()override
     {
-        std::cout << "RelExpAST {";
-        if (type == BianryOPExpType::INHERIT)
-        {
-            add_exp->Dump();
-        }
-        else if (type == BianryOPExpType::EXPAND)
-        {
-            rel_exp->Dump();
-            std::cout << " " << op << " ";
-            add_exp->Dump();
-        }
-        else
-        {
-            assert(false);
-        }
-        std::cout << "}";
     }
-    std::string DumpIR() const override
+    void Eval() override
     {
-        std::string ans = "";
+        if (is_evaled)
+        {
+            return;
+        }
         if (type == BianryOPExpType::INHERIT)
         {
-            ans = add_exp->DumpIR();
+            rel_exp->Eval();
+            Copy(rel_exp);
         }
         else if (type == BianryOPExpType::EXPAND)
         {
-            std::string lhs = rel_exp->DumpIR();
-            std::string lhs_IR = get_IR(lhs);
-            std::string lhs_var = get_var(lhs);
-            std::string rhs = add_exp->DumpIR();
-            std::string rhs_IR = get_IR(rhs);
-            std::string rhs_var = get_var(rhs);
-            std::string var = "%" + std::to_string(symbol_count++);
-            ans = var + "\n" + lhs_IR + rhs_IR + "  " + var + " = " + names[op] + " " + lhs_var + ", " + rhs_var + "\n";
+            eq_exp->Eval();
+            rel_exp->Eval();
+            is_const = eq_exp->is_const && rel_exp->is_const;
+            if (is_const)
+            {
+                int val1 = eq_exp->value;
+                int val2 = rel_exp->value;
+                if (op == "==")
+                    value = (val1 == val2);
+                else if (op == "!=")
+                    value = (val1 != val2);
+                else
+                {
+                    assert(false);
+                }
+                ident = std::to_string(value);
+            }
+            else
+            {
+                ident = "%" + std::to_string(symbol_count++);
+                std::cout << "  " << ident << " = " << names[op] << " " << eq_exp->ident << ", " << rel_exp->ident << std::endl;
+            }
         }
         else
         {
             assert(false);
         }
-        return ans;
+        is_evaled = true;
     }
 };
 
-class EqExpAST : public BaseAST
+class LAndExpAST : public BaseExpAST
 {
 public:
     BianryOPExpType type;
-    std::unique_ptr<BaseAST> eq_exp;
-    std::unique_ptr<BaseAST> rel_exp;
-    std::string op;
-    void Dump() const override
+    std::unique_ptr<BaseExpAST> land_exp;
+    std::unique_ptr<BaseExpAST> eq_exp;
+    void DumpIR() override
     {
-        std::cout << "EqExpAST {";
-        if (type == BianryOPExpType::INHERIT)
-        {
-            rel_exp->Dump();
-        }
-        else if (type == BianryOPExpType::EXPAND)
-        {
-            eq_exp->Dump();
-            std::cout << " " << op << " ";
-            rel_exp->Dump();
-        }
-        else
-        {
-            assert(false);
-        }
-        std::cout << "}";
     }
-    std::string DumpIR() const override
+    void Eval() override
     {
-        std::string ans = "";
+        if (is_evaled)
+        {
+            return;
+        }
         if (type == BianryOPExpType::INHERIT)
         {
-            ans = rel_exp->DumpIR();
+            eq_exp->Eval();
+            Copy(eq_exp);
         }
         else if (type == BianryOPExpType::EXPAND)
         {
-            std::string lhs = eq_exp->DumpIR();
-            std::string lhs_IR = get_IR(lhs);
-            std::string lhs_var = get_var(lhs);
-            std::string rhs = rel_exp->DumpIR();
-            std::string rhs_IR = get_IR(rhs);
-            std::string rhs_var = get_var(rhs);
-            std::string var = "%" + std::to_string(symbol_count++);
-            ans = var + "\n" + lhs_IR + rhs_IR + "  " + var + " = " + names[op] + " " + lhs_var + ", " + rhs_var + "\n";
+            land_exp->Eval();
+            if (land_exp->is_const && land_exp->value == 0)
+            {
+                value =land_exp->value;
+                ident = std::to_string(value);
+                is_const = true;
+                is_evaled = true;
+                return;
+            }
+            std::string lable_then = "%then_" + std::to_string(label_count);
+            std::string lable_else = "%else_" + std::to_string(label_count);
+            std::string lable_end = "%end_" + std::to_string(label_count++);
+            ident = "t" + std::to_string(alloc_tmp);
+            std::string ir_name = "@" + ident;
+            symbol_table_stack.Insert(ident, ir_name);
+            alloc_tmp++;
+            std::cout << "  " << ir_name << " = alloc i32" << std::endl;
+            std::string tmp_var1 = "%"+std::to_string(symbol_count++);
+            std::cout << "  " << tmp_var1 << " = ne " << land_exp->ident << ", 0" << std::endl;
+            std::cout << "  br " << tmp_var1 << ", " << lable_then << ", " << lable_else << std::endl << std::endl;
+            std::cout << lable_then << ":" << std::endl;
+            eq_exp->Eval();
+            std::string tmp_var2 = "%" + std::to_string(symbol_count++);
+            std::cout << "  " << tmp_var2 << " = ne " << eq_exp->ident << ", 0" << std::endl;
+            std::cout << "  store " << tmp_var2 << ", " << ir_name << std::endl;
+            std::cout << "  jump " << lable_end << std::endl << std::endl;
+            std::cout << lable_else << ":" << std::endl;
+            std::cout << "  store 0, " << ir_name << std::endl;
+            std::cout << "  jump " << lable_end << std::endl << std::endl;
+            std::cout << lable_end << ":" << std::endl;
+            ident = "%" + std::to_string(symbol_count++);
+            std::cout << "  " << ident << " = load " << ir_name << std::endl;
+            if (land_exp->is_const && eq_exp->is_const)
+            {
+                value = land_exp->value && eq_exp->value;
+                ident = std::to_string(value);
+                is_const = true;
+            }
         }
         else
         {
             assert(false);
         }
-        return ans;
+        is_evaled = true;
     }
 };
-// LAndExp :: = EqExp | LAndExp "&&" EqExp;
-class LAndExpAST : public BaseAST
+
+class LOrExpAST : public BaseExpAST
 {
 public:
     BianryOPExpType type;
-    std::unique_ptr<BaseAST> land_exp;
-    std::unique_ptr<BaseAST> eq_exp;
-    void Dump() const override
+    std::unique_ptr<BaseExpAST> lor_exp;
+    std::unique_ptr<BaseExpAST> land_exp;
+    void DumpIR() override
     {
-        std::cout << "LAndExpAST {";
-        if (type == BianryOPExpType::INHERIT)
-        {
-            eq_exp->Dump();
-        }
-        else if (type == BianryOPExpType::EXPAND)
-        {
-            land_exp->Dump();
-            std::cout << " && ";
-            eq_exp->Dump();
-        }
-        else
-        {
-            assert(false);
-        }
-        std::cout << "}";
     }
-    std::string DumpIR() const override
+    void Eval() override
     {
-        std::string ans = "";
+        if (is_evaled)
+        {
+            return;
+        }
         if (type == BianryOPExpType::INHERIT)
         {
-            ans = eq_exp->DumpIR();
+            land_exp->Eval();
+            Copy(land_exp);
         }
         else if (type == BianryOPExpType::EXPAND)
         {
-            std::string lhs = land_exp->DumpIR();
-            std::string lhs_IR = get_IR(lhs);
-            std::string lhs_var = get_var(lhs);
-            std::string rhs = eq_exp->DumpIR();
-            std::string rhs_IR = get_IR(rhs);
-            std::string rhs_var = get_var(rhs);
-            std::string var = "%" + std::to_string(symbol_count+2);
-            ans = var + "\n" + lhs_IR + rhs_IR + "  %" + std::to_string(symbol_count) + " = ne " + lhs_var + ", 0\n" + "  %" + std::to_string(symbol_count + 1) + " = ne " + rhs_var + ", 0\n" + "  " + var + " = " + names["&&"] + " %" + std::to_string(symbol_count) + ", %" + std::to_string(symbol_count + 1) + "\n";
-            symbol_count += 3;
+            lor_exp->Eval();
+            if (lor_exp->is_const && lor_exp->value == 1)
+            {
+                value = lor_exp->value;
+                ident = std::to_string(value);
+                is_const = true;
+                is_evaled = true;
+                return;
+            }
+            std::string lable_then = "%then_" + std::to_string(label_count);
+            std::string lable_else = "%else_" + std::to_string(label_count);
+            std::string lable_end = "%end_" + std::to_string(label_count++);
+            std::string ir_name = "@t" + std::to_string(alloc_tmp);
+            symbol_table_stack.Insert(ident, ir_name);
+            alloc_tmp++;
+            std::cout << "  " << ir_name << " = alloc i32" << std::endl;
+            std::string tmp_var1 = "%" + std::to_string(symbol_count++);
+            std::cout << "  " << tmp_var1 << " = eq " << lor_exp->ident << ", 0" << std::endl;
+            std::cout << "  br " << tmp_var1 << ", " << lable_then << ", " << lable_else << std::endl << std::endl;
+            std::cout << lable_then << ":" << std::endl;
+            land_exp->Eval();
+            std::string tmp_var2 = "%" + std::to_string(symbol_count++);
+            std::cout << "  " << tmp_var2 << " = ne " << land_exp->ident << ", 0" << std::endl;
+            std::cout<<"  store " << tmp_var2 << ", " << ir_name << std::endl;
+            std::cout << "  jump " << lable_end << std::endl << std::endl;
+            std::cout << lable_else << ":" << std::endl;
+            std::cout << "  store 1, "<<ir_name<<std::endl;
+            std::cout << "  jump " << lable_end << std::endl << std::endl;
+            std::cout << lable_end << ":" << std::endl;
+            ident = "%" + std::to_string(symbol_count++);
+            std::cout << "  " << ident << " = load " << ir_name << std::endl;
+            if (land_exp->is_const && lor_exp->is_const)
+            {
+                value = land_exp->value || lor_exp->value;
+                ident = std::to_string(value);
+                is_const = true;
+            }
         }
         else
+        {
             assert(false);
-        return ans;
+        }
+        is_evaled = true;
     }
 };
 
-class LOrExpAST : public BaseAST
+class DeclAST: public BaseAST
 {
 public:
-    BianryOPExpType type;
-    std::unique_ptr<BaseAST> lor_exp;
-    std::unique_ptr<BaseAST> land_exp;
-    void Dump() const override
+    DeclType type;
+    std::unique_ptr<BaseAST> const_decl;
+    std::unique_ptr<BaseAST> var_decl;
+    void DumpIR() override
     {
-        std::cout << "LOrExpAST {";
-        if (type == BianryOPExpType::INHERIT)
+        if (type == DeclType::CONST_DECL)
         {
-            land_exp->Dump();
+            const_decl->is_global = is_global;
+            const_decl->DumpIR();
         }
-        else if (type == BianryOPExpType::EXPAND)
+        else if (type == DeclType::VAR_DECL)
         {
-            lor_exp->Dump();
-            std::cout << " || ";
-            land_exp->Dump();
+            var_decl->is_global = is_global;
+            var_decl->DumpIR();
         }
-        else
-        {
+        else{
             assert(false);
         }
-        std::cout << "}";
-    }
-    std::string DumpIR() const override
-    {
-        std::string ans = "";
-        if (type == BianryOPExpType::INHERIT)
-        {
-            ans = land_exp->DumpIR();
-        }
-        else if (type == BianryOPExpType::EXPAND)
-        {
-            std::string lhs = lor_exp->DumpIR();
-            std::string lhs_IR = get_IR(lhs);
-            std::string lhs_var = get_var(lhs);
-            std::string rhs = land_exp->DumpIR();
-            std::string rhs_IR = get_IR(rhs);
-            std::string rhs_var = get_var(rhs);
-            std::string var = "%" + std::to_string(symbol_count + 2);
-            ans = var + "\n" + lhs_IR + rhs_IR + "  %" + std::to_string(symbol_count) + " = ne " + lhs_var + ", 0\n" + "  %" + std::to_string(symbol_count + 1) + " = ne " + rhs_var + ", 0\n" + "  " + var + " = " + names["||"] + " %" + std::to_string(symbol_count) + ", %" + std::to_string(symbol_count + 1) + "\n";
-            symbol_count += 3;
-        }
-        else
-        {
-            assert(false);
-        }
-        return ans;
     }
 };
 
-std::string get_IR(std::string str)
+class ConstDeclAST : public BaseAST
 {
-    std::istringstream iss(str);
-    std::string t;
-    std::getline(iss, t);
-    std::string line;
-    std::string IR;
-    while (std::getline(iss, line))
+public:
+    std::unique_ptr<BaseAST> btype;
+    std::unique_ptr<VecAST> const_defs;
+    void DumpIR() override
     {
-        IR += line + "\n";
+        for (auto& def: const_defs->vec)
+        {
+            def->is_global = is_global;
+            def->DumpIR();
+        }
     }
-    return IR;
-}
+};
 
-std::string get_var(std::string str)
+class ConstDefAST: public BaseAST
 {
-    std::istringstream iss(str);
-    std::string var;
-    std::getline(iss, var);
-    return var;
-}
+public:
+    std::unique_ptr<BaseExpAST> const_init_val;
+    void DumpIR() override
+    {
+        const_init_val->Eval();
+        symbol_table_stack.Insert(ident, const_init_val->value);
+    }
+};
+
+class ConstInitValAST : public BaseExpAST
+{
+public:
+    std::unique_ptr<BaseExpAST> const_exp;
+    void DumpIR() override
+    {
+    }
+    void Eval() override
+    {
+        if (is_evaled)
+        {
+            return;
+        }
+        const_exp->Eval();
+        Copy(const_exp);
+        is_evaled = true;
+    }
+};
+
+class BlockItemAST : public BaseAST
+{
+public:
+    BlockItemType type;
+    std::unique_ptr<BaseAST> decl;
+    std::unique_ptr<BaseAST> stmt;
+    void DumpIR() override
+    {
+        if (type == BlockItemType::BLK_DECL)
+        {
+            decl->DumpIR();
+        }
+        else if(type == BlockItemType::BLK_STMT)
+        {
+            stmt->DumpIR();
+        }
+    }
+};
+
+class LValAST : public BaseExpAST
+{
+public:
+    void DumpIR() override
+    {
+    }
+    void Eval() override
+    {
+        if (is_evaled)
+        {
+            return;
+        }
+        symbol_info_t *info = symbol_table_stack.LookUp(ident);
+        assert(info!=nullptr);
+        if (!is_left)
+        {
+            if (info->type == SYMBOL_TYPE::CONST_SYMBOL)
+            {
+                value = info->value;
+                ident = std::to_string(value);
+                is_const = true;
+            }
+            else if(info->type==SYMBOL_TYPE::VAR_SYMBOL)
+            {
+                ident = "%" + std::to_string(symbol_count++);
+                std::cout << "  " << ident << " = load " << info->ir_name << std::endl;
+            }
+        }
+        is_evaled = true;
+    }
+};
+
+class ConstExpAST : public BaseExpAST
+{
+public:
+    std::unique_ptr<BaseExpAST> exp;
+    void DumpIR() override
+    {
+    }
+    void Eval() override
+    {
+        if (is_evaled)
+        {
+            return;
+        }
+        exp->Eval();
+        Copy(exp);
+        is_evaled = true;
+    }
+};
+
+class VarDeclAST: public BaseAST
+{
+public:
+    std::unique_ptr<BaseAST> btype;
+    std::unique_ptr<VecAST> var_defs;
+    void DumpIR() override
+    {
+        for (auto& def: var_defs->vec)
+        {
+            def->is_global = is_global;
+            def->DumpIR();
+        }
+    }
+};
+
+class VarDefAST: public BaseAST
+{
+public:
+    VarDefType type;
+    std::unique_ptr<BaseExpAST> init_val;
+    void DumpIR() override
+    {
+        if (is_global)
+        {
+            std::cout << "global ";
+        }
+        std::string ir_name = "@" + ident;
+        ir_name = symbol_table_stack.Insert(ident, ir_name);
+        if (!is_global)
+        {
+            std::cout<<"  ";
+        }
+        std::cout << ir_name << " = alloc i32";
+        if (!is_global)
+        {
+            std::cout << std::endl;
+        }
+        if (type == VarDefType::VAR_ASSIGN)
+        {
+            init_val->Eval();
+            if (is_global)
+            {
+                std::cout << ", " << init_val->ident << std::endl;
+            }
+            else
+            {
+                std::cout << "  " << "store " << init_val->ident << ", " << ir_name << std::endl;
+            }
+        }
+        else
+        {
+            if (is_global)
+            {
+                std::cout << ", zeroinit" << std::endl;
+            }
+        }
+    }
+};
+
+class InitValAST: public BaseExpAST
+{
+public:
+    std::unique_ptr<BaseExpAST> exp;
+    void DumpIR() override
+    {
+    }
+    void Eval() override
+    {
+        if (is_evaled)
+        {
+            return;
+        }
+        exp->Eval();
+        Copy(exp);
+        is_evaled = true;
+    }
+};
+
+class FuncFParamAST: public BaseAST
+{
+public:
+    std::unique_ptr<BaseAST> btype;
+    void DumpIR() override
+    {
+        btype->DumpIR();
+        std::cout << "@" << ident << ": " << btype->ident;
+    }
+};
