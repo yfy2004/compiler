@@ -1,159 +1,202 @@
 #pragma once
-
+#include <cassert>
+#include <cstdio>
+#include <iostream>
+#include <memory>
 #include <string>
-#include <unordered_map>
-#include <vector>
+#include <string.h>
 #include "koopa.h"
-
 #define REG_NUM 15
-#define MAX_IMMEDIATE_VAL 2048
-#define ZERO_REG_ID 15
-#define PARAM_REG_NUM 8
 
-//#define RISCV_DEBUG
-#ifdef RISCV_DEBUG
-#define dbg_rscv_printf(...) fprintf(stderr, __VA_ARGS__)
-#else
-#define dbg_rscv_printf(...)
-#endif
+std::string Visit(const koopa_raw_program_t &program);
+std::string Visit(const koopa_raw_slice_t &slice);
+std::string Visit(const koopa_raw_function_t &func);
+std::string Visit(const koopa_raw_basic_block_t &bb);
+std::string Visit(const koopa_raw_value_t &value);
+std::string Visit(const koopa_raw_return_t &ret);
+std::string Visit(const koopa_raw_integer_t &interger);
+std::string Visit(const koopa_raw_binary_t &binary);
+std::string get_instructions(std::string str);
+std::string get_reg(std::string str);
+std::string gen_reg(int id);
 
-//#define REGS_DEBUG
-#ifdef REGS_DEBUG
-#define dbg_regs_printf(...) fprintf(stderr, __VA_ARGS__)
-#else
-#define dbg_regs_printf(...)
-#endif
+const std::string regs[REG_NUM] = {"t0", "t1", "t2", "t3", "t4", "t5", "t6", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7"};
+std::map<koopa_raw_value_t, std::string> is_visited;
+std::map<koopa_raw_binary_op_t, std::string> op_names = {{KOOPA_RBO_GT, "sgt"}, {KOOPA_RBO_LT, "slt"}, {KOOPA_RBO_ADD, "add"}, {KOOPA_RBO_SUB, "sub"}, {KOOPA_RBO_MUL, "mul"}, {KOOPA_RBO_DIV, "div"}, {KOOPA_RBO_MOD, "rem"}, {KOOPA_RBO_AND, "and"}, {KOOPA_RBO_OR, "or"}};
 
-class StackFrame
+int temp_reg_count = 0;
+int reg_count = 0;
+
+std::string Visit(const koopa_raw_program_t &program)
 {
-public:
-    StackFrame(){top=0;}
-    void set_stack_size(int size,bool store_ra_,int max_args_num_)
-    {
-        assert(size%16==0);
-        assert(size>=0);
-        stack_size=size;
-        top=(max_args_num_-8)*4;
-        if(top<0)
-            top=0;
-        store_ra=store_ra_;
-    }
-    int push(int size=4)
-    {
-        top+=size;
-        assert(top<=stack_size);
-        return top-size;
-    }
-    int get_stack_size() const
-    {
-        return stack_size;
-    }
-    bool is_store_ra() const
-    {
-        return store_ra;
-    }
+    std::string riscv = "  .text\n";
+    riscv += Visit(program.values);
+    riscv += Visit(program.funcs);
+    return riscv;
+}
 
-private:
-    int stack_size;
-    int top;
-    bool store_ra;
-};
-
-class RegManager
+std::string Visit(const koopa_raw_slice_t &slice)
 {
-private:
-    std::unordered_map<int,bool> regs_occupied;
-public:
-    RegManager()
+    std::string riscv = "";
+    for (size_t i = 0; i < slice.len; i++)
     {
-        for (int i = 0; i < REG_NUM; ++i)
-            regs_occupied[i] = false;
-    }
-    void free_regs()
-    {
-        for(int i=0;i<REG_NUM;++i)
-            regs_occupied[i]=false;
-        dbg_regs_printf("all free\n");
-    }
-    int alloc_reg()
-    {
-        int ret=-1;
-        for(int i=0;i<REG_NUM;++i)
+        auto ptr = slice.buffer[i];
+        switch (slice.kind)
         {
-            if(regs_occupied[i]==false)
-            {
-                ret=i;
-                regs_occupied[i]=true;
-                break;
-            }
+        case KOOPA_RSIK_FUNCTION:
+            riscv += get_instructions(Visit(reinterpret_cast<koopa_raw_function_t>(ptr)));
+            break;
+        case KOOPA_RSIK_BASIC_BLOCK:
+            riscv += get_instructions(Visit(reinterpret_cast<koopa_raw_basic_block_t>(ptr)));
+            break;
+        case KOOPA_RSIK_VALUE:
+            riscv += get_instructions(Visit(reinterpret_cast<koopa_raw_value_t>(ptr)));
+            break;
+        default:
+            assert(false);
         }
-        dbg_regs_printf("alloc %d\n", ret);
-        for (int j = 0; j < REG_NUM; ++j)
-        {
-            dbg_regs_printf("%d: %d\n", j, regs_occupied[j]);
-        }
-        assert(ret!=-1);
-        return ret;
     }
-    int alloc_reg(int i)
-    {
-        dbg_regs_printf("alloc special %d\n", i);
-        if(regs_occupied[i]==true)
-        {
-            dbg_regs_printf("Try to alloc occupied reg %d\n", i);
-            for(int j=0;j<REG_NUM;++j)
-            {
-                dbg_regs_printf("%d: %d\n", j, regs_occupied[j]);
-            }
-        }
-        assert(regs_occupied[i]==false);
-        regs_occupied[i]=true;
-        return i;
-    }
+    return riscv;
+}
 
-    void free(int i)
-    {
-        regs_occupied[i]=false;
-        dbg_regs_printf("free %d\n", i);
-    }
-
-
-};
-enum VAR_TYPE
+std::string Visit(const koopa_raw_function_t &func)
 {
-    ON_STACK,
-    ON_REG,
-    ON_GLOBAL
-};
-typedef struct
+    std::string func_name = std::string(func->name + 1);
+    std::string riscv = "  .globl " + func_name + "\n";
+    riscv += func_name + ":\n";
+    riscv += Visit(func->bbs);
+    return riscv;
+}
+
+std::string Visit(const koopa_raw_basic_block_t &bb)
 {
-    VAR_TYPE type;
-    int stack_location;
-    int reg_id;
-    std::string global_name;
+    return Visit(bb->insts);
+}
 
-} var_info_t;
+std::string Visit(const koopa_raw_value_t &value)
+{
+    if (is_visited.find(value) != is_visited.end())
+    {
+        return is_visited[value];
+    }
+    std::string riscv = "";
+    const auto &kind = value->kind;
+    switch (kind.tag)
+    {
+    case KOOPA_RVT_RETURN:
+        riscv += Visit(kind.data.ret);
+        break;
+    case KOOPA_RVT_INTEGER:
+        riscv += Visit(kind.data.integer);
+        break;
+    case KOOPA_RVT_BINARY:
+        riscv += Visit(kind.data.binary);
+        break;
+    default:
+        assert(false);
+    }
+    is_visited[value] = get_reg(riscv);
+    return riscv;
+}
 
-// 函数声明
-void Visit(const koopa_raw_program_t &program);
-void Visit(const koopa_raw_slice_t &slice);
-void Visit(const koopa_raw_function_t &func);
-void Visit(const koopa_raw_basic_block_t &bb);
-void Visit(const koopa_raw_return_t &ret);
-void Visit(const koopa_raw_store_t &store);
-void Visit(const koopa_raw_branch_t &branch);
-void Visit(const koopa_raw_jump_t &jump);
-void Prologue(const koopa_raw_function_t &func);
-void Epilogue();
-var_info_t Visit(const koopa_raw_value_t &value);
-var_info_t Visit(const koopa_raw_integer_t &interger);
-var_info_t Visit(const koopa_raw_binary_t &binary);
-var_info_t Visit(const koopa_raw_load_t &load);
-var_info_t Visit(const koopa_raw_call_t &call,bool is_ret);
-var_info_t Visit(const koopa_raw_global_alloc_t &global_alloc);
-var_info_t Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr);
-var_info_t Visit(const koopa_raw_get_ptr_t &get_ptr);
+std::string Visit(const koopa_raw_return_t &ret)
+{
+    koopa_raw_value_t value = ret.value;
+    std::string temp = Visit(value);
+    std::string reg = get_reg(temp);
+    std::string instructions = get_instructions(temp);
+    std::string riscv = "a0\n" + instructions + "  mv a0, " + reg + "\n";
+    riscv += "  ret\n";
+    return riscv;
 
-int get_var_size(const koopa_raw_type_t &ty);
-void get_aggregate(const koopa_raw_value_t &aggr);
-void generate_aggregate();
+}
+
+std::string Visit(const koopa_raw_integer_t &interger)
+{
+    int32_t value = interger.value;
+    if (value == 0)
+    {
+        return "x0\n";
+    }
+    std::string reg = gen_reg(temp_reg_count++);
+    std::string riscv = reg + "\n" "  li " + reg + ", " + std::to_string(value) + "\n";
+    return riscv;
+}
+
+std::string Visit(const koopa_raw_binary_t &binary)
+{
+    temp_reg_count = reg_count;    
+    std::string lhs = Visit(binary.lhs);
+    std::string lhs_instructions = get_instructions(lhs);
+    std::string lhs_reg = get_reg(lhs);
+    std::string rhs = Visit(binary.rhs);
+    std::string rhs_instructions = get_instructions(rhs);
+    std::string rhs_reg = get_reg(rhs);
+    temp_reg_count = reg_count;
+    std::string new_reg = gen_reg(reg_count++);
+    std::string riscv = new_reg + "\n" + lhs_instructions + rhs_instructions;
+    std::string op_instructions = "";
+    koopa_raw_binary_op_t op = binary.op;
+    switch (op)
+    {
+    case KOOPA_RBO_GT:
+    case KOOPA_RBO_LT:
+    case KOOPA_RBO_ADD:
+    case KOOPA_RBO_SUB:
+    case KOOPA_RBO_MUL:
+    case KOOPA_RBO_DIV:
+    case KOOPA_RBO_MOD:
+    case KOOPA_RBO_AND:
+    case KOOPA_RBO_OR:
+        op_instructions = op_names[op];
+        riscv += "  " + op_instructions + " " + new_reg + ", " + lhs_reg + ", " + rhs_reg + "\n";
+        break;
+    case KOOPA_RBO_EQ:
+        riscv += "  xor " + new_reg + ", " + lhs_reg + ", " + rhs_reg + "\n" + "  seqz " + new_reg + ", " + new_reg + "\n";
+        break;
+    case KOOPA_RBO_NOT_EQ:
+        riscv += "  xor " + new_reg + ", " + lhs_reg + ", " + rhs_reg + "\n" + "  snez " + new_reg + ", " + new_reg + "\n";
+        break;
+    case KOOPA_RBO_LE:  
+        riscv += "  sgt " + new_reg + ", " + lhs_reg + ", " + rhs_reg + "\n" + "  xori " + new_reg + ", " + new_reg + ", 1\n";
+        break;
+    case KOOPA_RBO_GE:
+        riscv += "  slt " + new_reg + ", " + lhs_reg + ", " + rhs_reg + "\n" + "  xori " + new_reg + ", " + new_reg + ", 1\n";
+    }
+    return riscv;
+}
+
+std::string get_instructions(std::string str)
+{
+    std::istringstream iss(str);
+    std::string var;
+    std::getline(iss, var);
+    std::string riscv;
+    std::string line;
+    if(var[0] == ' ')
+    {
+        riscv = var + "\n";
+    }
+    while (std::getline(iss, line))
+    {
+        riscv += line + "\n";
+    }
+    return riscv;
+}
+
+std::string get_reg(std::string str)
+{
+    std::istringstream iss(str);
+    std::string var;
+    std::getline(iss, var);
+    return var;
+}
+
+std::string gen_reg(int id)
+{
+    if (id < REG_NUM)
+    {
+        return regs[id];
+    }
+    return "a" + std::to_string(id);
+}
