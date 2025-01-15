@@ -38,7 +38,7 @@ int main(int argc, const char *argv[])
         fprintf(fout, "%s\n", IR.c_str());
         cout << IR;
     }
-    else if(strcmp(mode,"-riscv") == 0)
+    else if (strcmp(mode, "-riscv") == 0)
     {
         koopa_program_t program;
         koopa_error_code_t ret = koopa_parse_from_string(IR.c_str(), &program);
