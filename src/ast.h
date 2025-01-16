@@ -14,6 +14,7 @@ class ExpVecAST;
 class BaseExpAST;
 class CompUnitAST;
 class FuncDefAST;
+class TypeAST;
 class BlockAST;
 class StmtAST;
 class OpenStmtAST;
@@ -32,7 +33,6 @@ class LOrExpAST;
 
 class DeclAST;
 class ConstDeclAST;
-class TypeAST;
 class ConstDefAST;
 class ConstInitValAST;
 class BlockItemAST;
@@ -41,7 +41,6 @@ class ConstExpAST;
 class VarDeclAST;
 class VarDefAST;
 class InitVal;
-
 class FuncFParamAST;
 
 enum PrimaryExpType{EXP, NUMBER, LVAL};
@@ -53,7 +52,7 @@ enum BlockItemType{BLK_DECL, BLK_STMT};
 enum StmtType{STMT_OPEN, STMT_CLOSED};
 enum OpenStmtType{OSTMT_CLOSED, OSTMT_OPEN, OSTMT_ELSE, OSTMT_WHILE};
 enum ClosedStmtType{CSTMT_SIMPLE, CSTMT_ELSE, CSTMT_WHILE};
-enum SimpleStmtType{SSTMT_ASSIGN, SSTMT_EMPTY_RET, SSTMT_RETURN, SSTMT_EMPTY_EXP, SSTMT_EXP, SSTMT_BLK, SSTMT_BREAK,SSTMT_CONTINUE};
+enum SimpleStmtType{SSTMT_ASSIGN, SSTMT_EMPTY_RET, SSTMT_RETURN, SSTMT_EMPTY_EXP, SSTMT_EXP, SSTMT_BLK, SSTMT_BREAK, SSTMT_CONTINUE};
 
 static int symbol_count = 0;
 static int label_count = 0;
@@ -100,7 +99,7 @@ public:
     bool is_const = false;
     bool is_evaled = false;
     bool is_left = false;
-    void Copy(std::unique_ptr<BaseExpAST>& exp)
+    void Copy(std::unique_ptr<BaseExpAST> &exp)
     {
         value = exp->value;
         ident = exp->ident;
@@ -117,7 +116,7 @@ public:
     { 
         symbol_table_stack.PushScope();
         initSysyRuntimeLib();
-        for(auto &item:comp_units->vec)
+        for (auto &item:comp_units->vec)
         {
             item->is_global = true;
             item->DumpIR();
@@ -143,9 +142,9 @@ public:
         std::vector<std::string> params;
         std::cout << "fun @" << ident << "(";
         int count = 0;
-        for(auto &param: func_fparams->vec)
+        for (auto &param: func_fparams->vec)
         {
-            if(count != 0)
+            if (count != 0)
             {
                 std::cout << ", ";
             }
@@ -160,10 +159,10 @@ public:
         }
         std::cout << " {" << std::endl;
         std::cout << "%entry_" << ident << ":" << std::endl;
-        for(auto& param: params)
+        for (auto &param: params)
         {
             symbol_table_stack.Insert(param, "%" + param);
-            symbol_info_t* info = symbol_table_stack.LookUp(param);
+            symbol_info_t *info = symbol_table_stack.LookUp(param);
             std::cout << "  " << info->ir_name << " = alloc i32" << std::endl;
             std::cout << "  store @" << param << ", " << info->ir_name << std::endl;
         }
@@ -174,7 +173,7 @@ public:
             {
                 std::cout << "  ret 0" << std::endl;
             }
-            else if(func_type->ident == "void")
+            else if (func_type->ident == "void")
                 std::cout << "  ret" << std::endl;
         }
         std::cout << "}" << std::endl;
@@ -210,7 +209,7 @@ public:
     std::unique_ptr<VecAST> items;
     void DumpIR() override
     {
-        for(auto &item:items->vec)
+        for (auto &item:items->vec)
         {  
             if (is_ret == true)
             {
@@ -233,7 +232,7 @@ public:
         {
             closed_stmt->DumpIR();
         }
-        else if(type == StmtType::STMT_OPEN)
+        else if (type == StmtType::STMT_OPEN)
         {
             open_stmt->DumpIR();
         }
@@ -253,86 +252,86 @@ public:
     std::unique_ptr<BaseAST> closed_stmt;
     void DumpIR() override
     {
-        std::string lable_then = "%then_" + std::to_string(label_count);
-        std::string lable_else = "%else_" + std::to_string(label_count);
-        std::string lable_end = "%end_" + std::to_string(label_count);
-        std::string lable_while_entry = "%while_entry_" + std::to_string(label_count);
-        std::string lable_while_body = "%while_body_" + std::to_string(label_count++);
+        std::string label_then = "%then_" + std::to_string(label_count);
+        std::string label_else = "%else_" + std::to_string(label_count);
+        std::string label_end = "%end_" + std::to_string(label_count);
+        std::string label_while_entry = "%while_entry_" + std::to_string(label_count);
+        std::string label_while_body = "%while_body_" + std::to_string(label_count++);
         if (type == OpenStmtType::OSTMT_CLOSED)
         {
             exp->Eval();
-            std::cout << "  br " << exp->ident << ", " << lable_then << ", " << lable_end << std::endl << std::endl;
-            std::cout << lable_then << ":" << std::endl;
+            std::cout << "  br " << exp->ident << ", " << label_then << ", " << label_end << std::endl << std::endl;
+            std::cout << label_then << ":" << std::endl;
             is_ret = false;
             closed_stmt->DumpIR();
             if (is_ret == false)
             {
-                std::cout << "  jump " << lable_end << std::endl;
+                std::cout << "  jump " << label_end << std::endl;
             }
             std::cout << std::endl;
-            std::cout << lable_end << ":" << std::endl;
+            std::cout << label_end << ":" << std::endl;
             is_ret = false;
         }
         else if (type == OpenStmtType::OSTMT_OPEN)
         {
             exp->Eval();
-            std::cout << "  br " << exp->ident << ", " << lable_then << ", " << lable_end << std::endl << std::endl;
-            std::cout << lable_then << ":" << std::endl;
+            std::cout << "  br " << exp->ident << ", " << label_then << ", " << label_end << std::endl << std::endl;
+            std::cout << label_then << ":" << std::endl;
             is_ret = false;
             open_stmt->DumpIR();
             if (is_ret == false)
             {
-                std::cout << "  jump " << lable_end << std::endl;
+                std::cout << "  jump " << label_end << std::endl;
             }
             std::cout << std::endl;
-            std::cout << lable_end << ":" << std::endl;
+            std::cout << label_end << ":" << std::endl;
             is_ret = false;
         }
-        else if(type == OpenStmtType::OSTMT_ELSE)
+        else if (type == OpenStmtType::OSTMT_ELSE)
         {
             bool total_ret = true;
             exp->Eval();
-            std::cout << "  br " << exp->ident << ", " << lable_then << ", " << lable_else << std::endl << std::endl;
-            std::cout << lable_then << ":" << std::endl;
+            std::cout << "  br " << exp->ident << ", " << label_then << ", " << label_else << std::endl << std::endl;
+            std::cout << label_then << ":" << std::endl;
             is_ret = false;
             closed_stmt->DumpIR();
             total_ret = total_ret & is_ret;
             if (is_ret == false)
             {
-                std::cout << "  jump " << lable_end << std::endl;
+                std::cout << "  jump " << label_end << std::endl;
             }
             std::cout << std::endl;
-            std::cout << lable_else << ":" << std::endl;
+            std::cout << label_else << ":" << std::endl;
             is_ret = false;
             open_stmt->DumpIR();
             total_ret = total_ret & is_ret;
             if (is_ret == false)
             {
-                std::cout << "  jump " << lable_end << std::endl;
+                std::cout << "  jump " << label_end << std::endl;
             }
             std::cout << std::endl;
             if (total_ret == false)
             {
-                std::cout << lable_end << ":" << std::endl;
+                std::cout << label_end << ":" << std::endl;
             }
             is_ret = total_ret;
         }
-        else if(type == OpenStmtType::OSTMT_WHILE)
+        else if (type == OpenStmtType::OSTMT_WHILE)
         {
             while_stack.push_back(label_count - 1);
-            std::cout << "  jump " << lable_while_entry << std::endl << std::endl;
-            std::cout << lable_while_entry << ":" << std::endl;
+            std::cout << "  jump " << label_while_entry << std::endl << std::endl;
+            std::cout << label_while_entry << ":" << std::endl;
             exp->Eval();
-            std::cout << "  br " << exp->ident << ", " << lable_while_body << ", " << lable_end << std::endl << std::endl;
-            std::cout << lable_while_body << ":" << std::endl;
+            std::cout << "  br " << exp->ident << ", " << label_while_body << ", " << label_end << std::endl << std::endl;
+            std::cout << label_while_body << ":" << std::endl;
             is_ret = false;
             open_stmt->DumpIR();
             if (is_ret == false)
             {
-                std::cout << "  jump " << lable_while_entry << std::endl;
+                std::cout << "  jump " << label_while_entry << std::endl;
             }
             std::cout << std::endl;
-            std::cout << lable_end<<":" << std::endl;
+            std::cout << label_end << ":" << std::endl;
             is_ret = false;
             while_stack.pop_back();
         }
@@ -357,57 +356,57 @@ public:
         {
             simple_stmt->DumpIR();
         }
-        else if(type == ClosedStmtType::CSTMT_ELSE)
+        else if (type == ClosedStmtType::CSTMT_ELSE)
         {
-            std::string lable_then = "%then_" + std::to_string(label_count);
-            std::string lable_else = "%else_" + std::to_string(label_count);
-            std::string lable_end = "%end_" + std::to_string(label_count++);
+            std::string label_then = "%then_" + std::to_string(label_count);
+            std::string label_else = "%else_" + std::to_string(label_count);
+            std::string label_end = "%end_" + std::to_string(label_count++);
             bool total_ret = true;
             exp->Eval();
-            std::cout << "  br " << exp->ident << ", " << lable_then << ", " << lable_else << std::endl << std::endl;
-            std::cout << lable_then << ":" << std::endl;
+            std::cout << "  br " << exp->ident << ", " << label_then << ", " << label_else << std::endl << std::endl;
+            std::cout << label_then << ":" << std::endl;
             is_ret = false;
             closed_stmt1->DumpIR();
             total_ret = total_ret & is_ret;
             if (is_ret == false)
             {
-                std::cout << "  jump " << lable_end << std::endl;
+                std::cout << "  jump " << label_end << std::endl;
             }
             std::cout << std::endl;
-            std::cout << lable_else << ":" << std::endl;
+            std::cout << label_else << ":" << std::endl;
             is_ret = false;
             closed_stmt2->DumpIR();
             total_ret = total_ret & is_ret;
             if (is_ret == false)
             {
-                std::cout << "  jump " << lable_end << std::endl;
+                std::cout << "  jump " << label_end << std::endl;
             }
             std::cout << std::endl;
             if (total_ret == false)
             {
-                std::cout << lable_end << ":" << std::endl;
+                std::cout << label_end << ":" << std::endl;
             }
             is_ret = total_ret;
         }
-        else if(type == ClosedStmtType::CSTMT_WHILE)
+        else if (type == ClosedStmtType::CSTMT_WHILE)
         {
-            std::string lable_end = "%end_" + std::to_string(label_count);
-            std::string lable_while_entry = "%while_entry_" + std::to_string(label_count);
-            std::string lable_while_body = "%while_body_" + std::to_string(label_count);
+            std::string label_end = "%end_" + std::to_string(label_count);
+            std::string label_while_entry = "%while_entry_" + std::to_string(label_count);
+            std::string label_while_body = "%while_body_" + std::to_string(label_count);
             while_stack.push_back(label_count++);
-            std::cout << "  jump " << lable_while_entry << std::endl << std::endl;
-            std::cout << lable_while_entry << ":" << std::endl;
+            std::cout << "  jump " << label_while_entry << std::endl << std::endl;
+            std::cout << label_while_entry << ":" << std::endl;
             exp->Eval();
-            std::cout << "  br " << exp->ident << ", " << lable_while_body << ", " << lable_end << std::endl << std::endl;
-            std::cout << lable_while_body << ":" << std::endl;
+            std::cout << "  br " << exp->ident << ", " << label_while_body << ", " << label_end << std::endl << std::endl;
+            std::cout << label_while_body << ":" << std::endl;
             is_ret = false;
             closed_stmt1->DumpIR();
             if (is_ret == false)
             {
-                std::cout << "  jump " << lable_while_entry << std::endl;
+                std::cout << "  jump " << label_while_entry << std::endl;
             }
             std::cout << std::endl;
-            std::cout << lable_end << ":" << std::endl;
+            std::cout << label_end << ":" << std::endl;
             is_ret = false;
             while_stack.pop_back();
         }
@@ -433,7 +432,7 @@ public:
             std::cout << "  ret " << exp->ident << std::endl;
             is_ret = true;
         }
-        else if(type == SimpleStmtType::SSTMT_EMPTY_RET)
+        else if (type == SimpleStmtType::SSTMT_EMPTY_RET)
         {
             std::string ret_type = func_map[current_func];
             if (ret_type == "i32")
@@ -456,13 +455,13 @@ public:
             symbol_info_t *info = symbol_table_stack.LookUp(lval->ident);
             std::cout << "  store " << exp->ident << ", " << info->ir_name << std::endl;
         }
-        else if(type == SimpleStmtType::SSTMT_BLK)
+        else if (type == SimpleStmtType::SSTMT_BLK)
         {
             symbol_table_stack.PushScope();
             block->DumpIR();
             symbol_table_stack.PopScope();
         }
-        else if(type == SimpleStmtType::SSTMT_EMPTY_EXP)
+        else if (type == SimpleStmtType::SSTMT_EMPTY_EXP)
         {
         }
         else if (type == SimpleStmtType::SSTMT_EXP)
@@ -470,14 +469,14 @@ public:
             exp->Eval();
             exp->DumpIR();
         }
-        else if(type == SimpleStmtType::SSTMT_BREAK)
+        else if (type == SimpleStmtType::SSTMT_BREAK)
         {
             assert(!while_stack.empty());
             int label_num = while_stack.back();
             std::cout << "  jump %end_" << std::to_string(label_num) << std::endl << std::endl;
             is_ret = true;
         }
-        else if(type == SimpleStmtType::SSTMT_CONTINUE)
+        else if (type == SimpleStmtType::SSTMT_CONTINUE)
         {
             assert(!while_stack.empty());
             int label_num = while_stack.back();
@@ -538,7 +537,7 @@ public:
             is_const = true;
             ident = std::to_string(value);
         }
-        else if(type == PrimaryExpType::LVAL)
+        else if (type == PrimaryExpType::LVAL)
         {
             lval->Eval();
             Copy(lval);
@@ -547,7 +546,7 @@ public:
         {
             assert(false);
         }
-        is_evaled=true;
+        is_evaled = true;
     }
 };
 
@@ -565,7 +564,7 @@ public:
     }
     void Eval() override
     {
-        if(is_evaled)
+        if (is_evaled)
         {
             return;
         }
@@ -613,7 +612,7 @@ public:
             }
             is_evaled = true;
         }
-        else if(type == UnaryExpType::CALL)
+        else if (type == UnaryExpType::CALL)
         {
             for (auto &param: func_rparams->vec)
             {
@@ -681,11 +680,17 @@ public:
                 int val1 = mul_exp->value;
                 int val2 = unary_exp->value;
                 if (op == "*")
+                {
                     value = val1 * val2;
+                }
                 else if (op == "/")
+                {
                     value = val1 / val2;
+                }
                 else if (op == "%")
+                {
                     value = val1 % val2;
+                }
                 else
                 {
                     assert(false);
@@ -737,9 +742,13 @@ public:
                 int val1 = add_exp->value;
                 int val2 = mul_exp->value;
                 if (op == "+")
+                {
                     value = val1 + val2;
-                else if (op=="-")
+                }
+                else if (op == "-")
+                {
                     value = val1 - val2;
+                }
                 else
                 {
                     assert(false);
@@ -791,13 +800,21 @@ public:
                 int val1 = rel_exp->value;
                 int val2 = add_exp->value;
                 if (op == "<")
+                {
                     value = (val1 < val2);
+                }
                 else if (op == ">")
+                {
                     value = (val1 > val2);
+                }
                 else if (op == "<=")
+                {
                     value = (val1 <= val2);
+                }
                 else if (op == ">=")
+                {
                     value = (val1 >= val2);
+                }
                 else
                 {
                     assert(false);
@@ -848,9 +865,13 @@ public:
                 int val1 = eq_exp->value;
                 int val2 = rel_exp->value;
                 if (op == "==")
+                {
                     value = (val1 == val2);
+                }
                 else if (op == "!=")
+                {
                     value = (val1 != val2);
+                }
                 else
                 {
                     assert(false);
@@ -896,33 +917,32 @@ public:
             land_exp->Eval();
             if (land_exp->is_const && land_exp->value == 0)
             {
-                value =land_exp->value;
+                value = land_exp->value;
                 ident = std::to_string(value);
                 is_const = true;
                 is_evaled = true;
                 return;
             }
-            std::string lable_then = "%then_" + std::to_string(label_count);
-            std::string lable_else = "%else_" + std::to_string(label_count);
-            std::string lable_end = "%end_" + std::to_string(label_count++);
-            ident = "t" + std::to_string(alloc_tmp);
+            std::string label_then = "%then_" + std::to_string(label_count);
+            std::string label_else = "%else_" + std::to_string(label_count);
+            std::string label_end = "%end_" + std::to_string(label_count++);
+            ident = "t" + std::to_string(alloc_tmp++);
             std::string ir_name = "@" + ident;
             symbol_table_stack.Insert(ident, ir_name);
-            alloc_tmp++;
             std::cout << "  " << ir_name << " = alloc i32" << std::endl;
             std::string tmp_var1 = "%"+std::to_string(symbol_count++);
             std::cout << "  " << tmp_var1 << " = ne " << land_exp->ident << ", 0" << std::endl;
-            std::cout << "  br " << tmp_var1 << ", " << lable_then << ", " << lable_else << std::endl << std::endl;
-            std::cout << lable_then << ":" << std::endl;
+            std::cout << "  br " << tmp_var1 << ", " << label_then << ", " << label_else << std::endl << std::endl;
+            std::cout << label_then << ":" << std::endl;
             eq_exp->Eval();
             std::string tmp_var2 = "%" + std::to_string(symbol_count++);
             std::cout << "  " << tmp_var2 << " = ne " << eq_exp->ident << ", 0" << std::endl;
             std::cout << "  store " << tmp_var2 << ", " << ir_name << std::endl;
-            std::cout << "  jump " << lable_end << std::endl << std::endl;
-            std::cout << lable_else << ":" << std::endl;
+            std::cout << "  jump " << label_end << std::endl << std::endl;
+            std::cout << label_else << ":" << std::endl;
             std::cout << "  store 0, " << ir_name << std::endl;
-            std::cout << "  jump " << lable_end << std::endl << std::endl;
-            std::cout << lable_end << ":" << std::endl;
+            std::cout << "  jump " << label_end << std::endl << std::endl;
+            std::cout << label_end << ":" << std::endl;
             ident = "%" + std::to_string(symbol_count++);
             std::cout << "  " << ident << " = load " << ir_name << std::endl;
             if (land_exp->is_const && eq_exp->is_const)
@@ -971,26 +991,25 @@ public:
                 is_evaled = true;
                 return;
             }
-            std::string lable_then = "%then_" + std::to_string(label_count);
-            std::string lable_else = "%else_" + std::to_string(label_count);
-            std::string lable_end = "%end_" + std::to_string(label_count++);
-            std::string ir_name = "@t" + std::to_string(alloc_tmp);
+            std::string label_then = "%then_" + std::to_string(label_count);
+            std::string label_else = "%else_" + std::to_string(label_count);
+            std::string label_end = "%end_" + std::to_string(label_count++);
+            std::string ir_name = "@t" + std::to_string(alloc_tmp++);
             symbol_table_stack.Insert(ident, ir_name);
-            alloc_tmp++;
             std::cout << "  " << ir_name << " = alloc i32" << std::endl;
             std::string tmp_var1 = "%" + std::to_string(symbol_count++);
             std::cout << "  " << tmp_var1 << " = eq " << lor_exp->ident << ", 0" << std::endl;
-            std::cout << "  br " << tmp_var1 << ", " << lable_then << ", " << lable_else << std::endl << std::endl;
-            std::cout << lable_then << ":" << std::endl;
+            std::cout << "  br " << tmp_var1 << ", " << label_then << ", " << label_else << std::endl << std::endl;
+            std::cout << label_then << ":" << std::endl;
             land_exp->Eval();
             std::string tmp_var2 = "%" + std::to_string(symbol_count++);
             std::cout << "  " << tmp_var2 << " = ne " << land_exp->ident << ", 0" << std::endl;
-            std::cout<<"  store " << tmp_var2 << ", " << ir_name << std::endl;
-            std::cout << "  jump " << lable_end << std::endl << std::endl;
-            std::cout << lable_else << ":" << std::endl;
-            std::cout << "  store 1, "<<ir_name<<std::endl;
-            std::cout << "  jump " << lable_end << std::endl << std::endl;
-            std::cout << lable_end << ":" << std::endl;
+            std::cout << "  store " << tmp_var2 << ", " << ir_name << std::endl;
+            std::cout << "  jump " << label_end << std::endl << std::endl;
+            std::cout << label_else << ":" << std::endl;
+            std::cout << "  store 1, " << ir_name << std::endl;
+            std::cout << "  jump " << label_end << std::endl << std::endl;
+            std::cout << label_end << ":" << std::endl;
             ident = "%" + std::to_string(symbol_count++);
             std::cout << "  " << ident << " = load " << ir_name << std::endl;
             if (land_exp->is_const && lor_exp->is_const)
@@ -1039,7 +1058,7 @@ public:
     std::unique_ptr<VecAST> const_defs;
     void DumpIR() override
     {
-        for (auto& def: const_defs->vec)
+        for (auto &def: const_defs->vec)
         {
             def->is_global = is_global;
             def->DumpIR();
@@ -1089,7 +1108,7 @@ public:
         {
             decl->DumpIR();
         }
-        else if(type == BlockItemType::BLK_STMT)
+        else if (type == BlockItemType::BLK_STMT)
         {
             stmt->DumpIR();
         }
@@ -1109,7 +1128,7 @@ public:
             return;
         }
         symbol_info_t *info = symbol_table_stack.LookUp(ident);
-        assert(info!=nullptr);
+        assert(info != nullptr);
         if (!is_left)
         {
             if (info->type == SYMBOL_TYPE::CONST_SYMBOL)
@@ -1118,7 +1137,7 @@ public:
                 ident = std::to_string(value);
                 is_const = true;
             }
-            else if(info->type==SYMBOL_TYPE::VAR_SYMBOL)
+            else if (info->type == SYMBOL_TYPE::VAR_SYMBOL)
             {
                 ident = "%" + std::to_string(symbol_count++);
                 std::cout << "  " << ident << " = load " << info->ir_name << std::endl;
@@ -1154,7 +1173,7 @@ public:
     std::unique_ptr<VecAST> var_defs;
     void DumpIR() override
     {
-        for (auto& def: var_defs->vec)
+        for (auto &def: var_defs->vec)
         {
             def->is_global = is_global;
             def->DumpIR();
@@ -1177,7 +1196,7 @@ public:
         ir_name = symbol_table_stack.Insert(ident, ir_name);
         if (!is_global)
         {
-            std::cout<<"  ";
+            std::cout << "  ";
         }
         std::cout << ir_name << " = alloc i32";
         if (!is_global)

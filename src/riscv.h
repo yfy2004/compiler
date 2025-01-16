@@ -125,12 +125,12 @@ var_info_t Visit(const koopa_raw_load_t &load);
 var_info_t Visit(const koopa_raw_call_t &call, bool is_ret);
 var_info_t Visit(const koopa_raw_global_alloc_t &global_alloc);
 std::string gen_reg(int id);
-void GenLoadStoreInst(std::string op,std::string reg1,int imm,std::string reg2);
+void GenLoadStoreInst(std::string op, std::string reg1, int imm, std::string reg2);
 
 static const std::string regs[REG_NUM + 1] = {"t0", "t1", "t2", "t3", "t4", "t5", "t6", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "x0"};
 static std::map<koopa_raw_value_t, var_info_t> is_visited;
 static std::map<koopa_raw_binary_op_t, std::string> op_names = {{KOOPA_RBO_GT, "sgt"}, {KOOPA_RBO_LT, "slt"}, {KOOPA_RBO_ADD, "add"}, {KOOPA_RBO_SUB, "sub"}, {KOOPA_RBO_MUL, "mul"}, {KOOPA_RBO_DIV, "div"}, {KOOPA_RBO_MOD, "rem"}, {KOOPA_RBO_AND, "and"}, {KOOPA_RBO_OR, "or"}};
-static int global_cnt=0;
+static int global_count = 0;
 StackFrame stack_frame;
 RegManager reg_manager;
 
@@ -213,7 +213,7 @@ void Visit(const koopa_raw_store_t &store)
     }
     else
     {
-        GenLoadStoreInst("sw", gen_reg(src_var.reg_id), dst_var.stack_location,"sp");
+        GenLoadStoreInst("sw", gen_reg(src_var.reg_id), dst_var.stack_location, "sp");
     }
 }
 
@@ -251,10 +251,10 @@ void Prologue(const koopa_raw_function_t &func)
     int stack_size = 0;
     bool store_ra = false;
     int max_args_num = 0;
-    for(uint32_t i = 0; i < func->bbs.len; i++)
+    for (uint32_t i = 0; i < func->bbs.len; i++)
     {
         koopa_raw_basic_block_t bb = reinterpret_cast<koopa_raw_basic_block_t>(func->bbs.buffer[i]);
-        for(uint32_t j = 0; j < bb->insts.len; ++j)
+        for (uint32_t j = 0; j < bb->insts.len; ++j)
         {
             koopa_raw_value_t inst = reinterpret_cast<koopa_raw_value_t>(bb->insts.buffer[j]);
             if (inst->ty->tag != KOOPA_RTT_UNIT)
@@ -293,9 +293,9 @@ void Prologue(const koopa_raw_function_t &func)
     }
     if(store_ra)
     {
-        GenLoadStoreInst("sw","ra",stack_size-4,"sp");
+        GenLoadStoreInst("sw", "ra", stack_size-4, "sp");
     }
-    for(int i = 0; i < func->params.len; i++)
+    for (int i = 0; i < func->params.len; i++)
     {
         koopa_raw_value_t param = reinterpret_cast<koopa_raw_value_t>(func->params.buffer[i]);
         var_info_t param_info;
@@ -380,7 +380,7 @@ var_info_t Visit(const koopa_raw_value_t &value)
         reg_manager.free_regs();
         break;
     case KOOPA_RVT_ALLOC:
-        std::cout <<std::endl<< "  # alloc" << std::endl;
+        std::cout << std::endl << "  # alloc" << std::endl;
         vinfo.type = VAR_TYPE::ON_STACK;
         vinfo.stack_location = stack_frame.push();
         is_visited[value] = vinfo;
@@ -402,7 +402,7 @@ var_info_t Visit(const koopa_raw_value_t &value)
         reg_manager.free_regs();
         break;
     case KOOPA_RVT_CALL:
-        vinfo = Visit(kind.data.call,is_ret);
+        vinfo = Visit(kind.data.call, is_ret);
         is_visited[value] = vinfo;
         reg_manager.free_regs();
         break;
@@ -443,7 +443,7 @@ var_info_t Visit(const koopa_raw_binary_t &binary)
     {
         lvar.type = VAR_TYPE::ON_REG;
         lvar.reg_id = reg_manager.alloc_reg();
-        GenLoadStoreInst("lw", gen_reg(lvar.reg_id), lvar.stack_location,"sp");
+        GenLoadStoreInst("lw", gen_reg(lvar.reg_id), lvar.stack_location, "sp");
     }
     if (rvar.type == VAR_TYPE::ON_STACK)
     {
@@ -488,7 +488,7 @@ var_info_t Visit(const koopa_raw_binary_t &binary)
     var_info_t res;
     res.type = VAR_TYPE::ON_STACK;
     res.stack_location = stack_frame.push();
-    GenLoadStoreInst("sw", new_reg,res.stack_location,"sp");
+    GenLoadStoreInst("sw", new_reg, res.stack_location,"sp");
     return res;
 }
 
@@ -540,10 +540,10 @@ var_info_t Visit(const koopa_raw_call_t &call, bool is_ret)
 
 var_info_t Visit(const koopa_raw_global_alloc_t &global_alloc)
 {
-    std::string gname = "g_" + std::to_string(global_cnt++);
+    std::string gname = "g_" + std::to_string(global_count++);
     std::cout << std::endl << "  # global alloc" << std::endl;
     std::cout << "  .data" << std::endl;
-    std::cout << "  .globl " << gname <<std::endl;
+    std::cout << "  .globl " << gname << std::endl;
     std::cout << gname << ":" << std::endl;
     const auto &kind = global_alloc.init->kind.tag;
     switch (kind)
@@ -573,7 +573,7 @@ std::string gen_reg(int id)
     assert(false);
 }
 
-void GenLoadStoreInst(std::string op,std::string reg1,int imm,std::string reg2)
+void GenLoadStoreInst(std::string op, std::string reg1, int imm, std::string reg2)
 {
     if (imm < MAX_IMMEDIATE_VAL)
     {

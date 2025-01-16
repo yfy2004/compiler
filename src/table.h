@@ -12,29 +12,27 @@ typedef struct
     std::string ir_name;
 } symbol_info_t;
 
-class SymbolTable;
-class SymbolTableStack;
 class SymbolTable
 {
 private:
     int stack_depth;
     int id;
-    int child_cnt;
+    int child_count;
     std::string name;
     SymbolTable *parent;
     SymbolTable *child;
-    std::unordered_map<std::string,symbol_info_t*> symbol_table;
+    std::unordered_map<std::string, symbol_info_t*> symbol_table;
 public:
     SymbolTable()
     {
         stack_depth = 0;
         id = 0;
-        child_cnt = 0;
+        child_count = 0;
         name = "";
         parent = nullptr;
         child = nullptr;
     }
-    SymbolTable(int depth, int id) : stack_depth(depth), id(id), child_cnt(0)
+    SymbolTable(int depth, int id) : stack_depth(depth), id(id), child_count(0)
     {
     }
     inline bool Exist(std::string symbol);
@@ -45,7 +43,7 @@ public:
     inline SymbolTable *PushScope();
     ~SymbolTable()
     {
-        for(auto &item: symbol_table)
+        for (auto &item: symbol_table)
         {
             delete item.second;
         }
@@ -91,7 +89,7 @@ public:
 };
 
 inline SymbolTableStack symbol_table_stack;
-inline std::unordered_map<std::string,std::string> func_map;
+inline std::unordered_map<std::string, std::string> func_map;
 
 bool SymbolTable::Exist(std::string symbol)
 {
@@ -104,7 +102,7 @@ std::string SymbolTable::Insert(std::string symbol, int value)
     {
         return "";
     }
-    symbol_info_t* info = new symbol_info_t;
+    symbol_info_t *info = new symbol_info_t;
     info->value = value;
     info->type = SYMBOL_TYPE::CONST_SYMBOL;
     this->symbol_table[symbol] = info;
@@ -130,7 +128,7 @@ symbol_info_t *SymbolTable::LookUp(std::string symbol)
     {
         return symbol_table[symbol];
     }
-    if (parent!=nullptr)
+    if (parent != nullptr)
     {
         return parent->LookUp(symbol);
     }
@@ -142,13 +140,14 @@ symbol_info_t *SymbolTable::LookUp(std::string symbol)
 
 SymbolTable *SymbolTable::PushScope()
 {
-    SymbolTable *sym_tab = new SymbolTable(stack_depth + 1, child_cnt++);
+    SymbolTable *sym_tab = new SymbolTable(stack_depth + 1, child_count++);
     sym_tab->name = name + "_" + std::to_string(sym_tab->id);
     sym_tab->parent = this;
     sym_tab->child = nullptr;
     this->child = sym_tab;
     return sym_tab;
 }
+
 SymbolTable *SymbolTable::PopScope()
 {
     SymbolTable *sym_tab = this->parent;
