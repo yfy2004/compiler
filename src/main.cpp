@@ -30,7 +30,7 @@ int main(int argc, const char *argv[])
     auto ret = yyparse(ast);
     assert(!ret);
 
-    streambuf *old_cout = std::cout.rdbuf(fout.rdbuf());
+    streambuf *old_cout = cout.rdbuf(fout.rdbuf());
 
     if (strcmp(mode, "-koopa") == 0)
     {
@@ -38,7 +38,7 @@ int main(int argc, const char *argv[])
     }
     else if (strcmp(mode, "-riscv") == 0)
     {
-        std::stringstream ss;
+        stringstream ss;
         cout.rdbuf(ss.rdbuf());
         ast->DumpIR();
         cout.rdbuf(fout.rdbuf());

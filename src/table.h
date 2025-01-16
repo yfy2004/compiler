@@ -3,13 +3,15 @@
 #include <string>
 #include <unordered_map>
 
+using namespace std;
+
 enum SYMBOL_TYPE{CONST_SYMBOL, VAR_SYMBOL};
 typedef struct
 {
     SYMBOL_TYPE type;
     int value;
     int addr;
-    std::string ir_name;
+    string ir_name;
 } symbol_info_t;
 
 class SymbolTable
@@ -18,10 +20,10 @@ private:
     int stack_depth;
     int id;
     int child_count;
-    std::string name;
+    string name;
     SymbolTable *parent;
     SymbolTable *child;
-    std::unordered_map<std::string, symbol_info_t*> symbol_table;
+    unordered_map<string, symbol_info_t*> symbol_table;
 public:
     SymbolTable()
     {
@@ -35,10 +37,10 @@ public:
     SymbolTable(int depth, int id) : stack_depth(depth), id(id), child_count(0)
     {
     }
-    inline bool Exist(std::string symbol);
-    inline std::string Insert(std::string symbol, int value);
-    inline std::string Insert(std::string symbol, std::string ir_name);
-    inline symbol_info_t *LookUp(std::string symbol);
+    inline bool Exist(string symbol);
+    inline string Insert(string symbol, int value);
+    inline string Insert(string symbol, string ir_name);
+    inline symbol_info_t *LookUp(string symbol);
     inline SymbolTable *PopScope();
     inline SymbolTable *PushScope();
     ~SymbolTable()
@@ -60,19 +62,19 @@ public:
     {
         current_symtab = new SymbolTable();
     }
-    bool Exist(std::string symbol)
+    bool Exist(string symbol)
     {
         return current_symtab->Exist(symbol);
     }
-    std::string Insert(std::string symbol, int value)
+    string Insert(string symbol, int value)
     {
         return current_symtab->Insert(symbol, value);
     }
-    std::string Insert(std::string symbol, std::string ir_name)
+    string Insert(string symbol, string ir_name)
     {
         return current_symtab->Insert(symbol, ir_name);
     }
-    symbol_info_t *LookUp(std::string symbol)
+    symbol_info_t *LookUp(string symbol)
     {
         return current_symtab->LookUp(symbol);
     }
@@ -89,14 +91,14 @@ public:
 };
 
 inline SymbolTableStack symbol_table_stack;
-inline std::unordered_map<std::string, std::string> func_map;
+inline unordered_map<string, string> func_map;
 
-bool SymbolTable::Exist(std::string symbol)
+bool SymbolTable::Exist(string symbol)
 {
     return (symbol_table.find(symbol) != symbol_table.end());
 }
 
-std::string SymbolTable::Insert(std::string symbol, int value)
+string SymbolTable::Insert(string symbol, int value)
 {
     if (Exist(symbol))
     {
@@ -109,7 +111,7 @@ std::string SymbolTable::Insert(std::string symbol, int value)
     return "";
 }
 
-std::string SymbolTable::Insert(std::string symbol, std::string ir_name)
+string SymbolTable::Insert(string symbol, string ir_name)
 {
     if (Exist(symbol))
     {
@@ -122,7 +124,7 @@ std::string SymbolTable::Insert(std::string symbol, std::string ir_name)
     return info->ir_name;
 }
 
-symbol_info_t *SymbolTable::LookUp(std::string symbol)
+symbol_info_t *SymbolTable::LookUp(string symbol)
 {
     if (Exist(symbol))
     {
@@ -141,7 +143,7 @@ symbol_info_t *SymbolTable::LookUp(std::string symbol)
 SymbolTable *SymbolTable::PushScope()
 {
     SymbolTable *sym_tab = new SymbolTable(stack_depth + 1, child_count++);
-    sym_tab->name = name + "_" + std::to_string(sym_tab->id);
+    sym_tab->name = name + "_" + to_string(sym_tab->id);
     sym_tab->parent = this;
     sym_tab->child = nullptr;
     this->child = sym_tab;
@@ -164,12 +166,12 @@ inline void initSysyRuntimeLib()
     func_map["putarray"] = "void";
     func_map["starttime"] = "void";
     func_map["stoptime"] = "void";
-    std::cout << "decl @getint(): i32" << std::endl;
-    std::cout << "decl @getch(): i32" << std::endl;
-    std::cout << "decl @getarray(*i32): i32" << std::endl;
-    std::cout << "decl @putint(i32)" << std::endl;
-    std::cout << "decl @putch(i32)" << std::endl;
-    std::cout << "decl @putarray(i32, *i32)" << std::endl;
-    std::cout << "decl @starttime()" << std::endl;
-    std::cout << "decl @stoptime()" << std::endl;
+    cout << "decl @getint(): i32" << endl;
+    cout << "decl @getch(): i32" << endl;
+    cout << "decl @getarray(*i32): i32" << endl;
+    cout << "decl @putint(i32)" << endl;
+    cout << "decl @putch(i32)" << endl;
+    cout << "decl @putarray(i32, *i32)" << endl;
+    cout << "decl @starttime()" << endl;
+    cout << "decl @stoptime()" << endl;
 }

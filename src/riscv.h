@@ -14,6 +14,8 @@
 #define ZERO_REG_ID 15
 #define PARAM_REG_NUM 8
 
+using namespace std;
+
 class StackFrame
 {
 public:
@@ -51,12 +53,12 @@ private:
     int stack_size;
     int top;
     bool store_ra;
-};
+} stack_frame;
 
 class RegManager
 {
 private:
-    std::unordered_map<int, bool> regs_occupied;
+    unordered_map<int, bool> regs_occupied;
 public:
     RegManager()
     {
@@ -97,7 +99,7 @@ public:
     {
         regs_occupied[i] = false;
     }
-};
+} reg_manager;
 
 enum VAR_TYPE{ON_STACK, ON_REG, ON_GLOBAL};
 
@@ -105,7 +107,7 @@ typedef struct{
     VAR_TYPE type;
     int stack_location;
     int reg_id;
-    std::string global_name;
+    string global_name;
 } var_info_t;
 
 void Visit(const koopa_raw_program_t &program);
@@ -124,20 +126,18 @@ var_info_t Visit(const koopa_raw_binary_t &binary);
 var_info_t Visit(const koopa_raw_load_t &load);
 var_info_t Visit(const koopa_raw_call_t &call, bool is_ret);
 var_info_t Visit(const koopa_raw_global_alloc_t &global_alloc);
-std::string gen_reg(int id);
-void GenLoadStoreInst(std::string op, std::string reg1, int imm, std::string reg2);
+string gen_reg(int id);
+void GenLoadStoreInst(string op, string reg1, int imm, string reg2);
 
-static const std::string regs[REG_NUM + 1] = {"t0", "t1", "t2", "t3", "t4", "t5", "t6", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "x0"};
-static std::map<koopa_raw_value_t, var_info_t> is_visited;
-static std::map<koopa_raw_binary_op_t, std::string> op_names = {{KOOPA_RBO_GT, "sgt"}, {KOOPA_RBO_LT, "slt"}, {KOOPA_RBO_ADD, "add"}, {KOOPA_RBO_SUB, "sub"}, {KOOPA_RBO_MUL, "mul"}, {KOOPA_RBO_DIV, "div"}, {KOOPA_RBO_MOD, "rem"}, {KOOPA_RBO_AND, "and"}, {KOOPA_RBO_OR, "or"}};
+static const string regs[REG_NUM + 1] = {"t0", "t1", "t2", "t3", "t4", "t5", "t6", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "x0"};
+static map<koopa_raw_value_t, var_info_t> is_visited;
+static map<koopa_raw_binary_op_t, string> op_names = {{KOOPA_RBO_GT, "sgt"}, {KOOPA_RBO_LT, "slt"}, {KOOPA_RBO_ADD, "add"}, {KOOPA_RBO_SUB, "sub"}, {KOOPA_RBO_MUL, "mul"}, {KOOPA_RBO_DIV, "div"}, {KOOPA_RBO_MOD, "rem"}, {KOOPA_RBO_AND, "and"}, {KOOPA_RBO_OR, "or"}};
 static int global_count = 0;
-StackFrame stack_frame;
-RegManager reg_manager;
 
 void Visit(const koopa_raw_program_t &program)
 {
     Visit(program.values);
-    std::cout << "  .text" << std::endl;
+    cout << "  .text" << endl;
     Visit(program.funcs);
 }
 
@@ -169,37 +169,37 @@ void Visit(const koopa_raw_function_t &func)
     {
         return;
     }
-    std::string func_name = std::string(func->name + 1);
-    std::cout << "  .globl " << func_name << std::endl;
-    std::cout << func_name << ":" << std::endl;
+    string func_name = string(func->name + 1);
+    cout << "  .globl " << func_name << endl;
+    cout << func_name << ":" << endl;
     Prologue(func);
     Visit(func->bbs);
-    std::cout << std::endl;
+    cout << endl;
 }
 
 void Visit(const koopa_raw_basic_block_t &bb)
 {
-    std::cout << bb->name + 1 << ":" << std::endl;
+    cout << bb->name + 1 << ":" << endl;
     Visit(bb->insts);
 }
 
 void Visit(const koopa_raw_return_t &ret)
 {
     koopa_raw_value_t value = ret.value;
-    std::cout << std::endl << "  # ret" << std::endl;
+    cout << endl << "  # ret" << endl;
     if (value)
     {
         var_info_t var = Visit(value);
         assert(var.type == VAR_TYPE::ON_REG);
-        std::cout << "  mv a0, " << gen_reg(var.reg_id) << std::endl;
+        cout << "  mv a0, " << gen_reg(var.reg_id) << endl;
     }
     Epilogue();
-    std::cout << "  ret" << std::endl;
+    cout << "  ret" << endl;
 }
 
 void Visit(const koopa_raw_store_t &store)
 {
-    std::cout << std::endl << "  # store" << std::endl;
+    cout << endl << "  # store" << endl;
     koopa_raw_value_t dst = store.dest;
     assert(is_visited.find(dst) != is_visited.end());
     var_info_t src_var = Visit(store.value);
@@ -208,8 +208,8 @@ void Visit(const koopa_raw_store_t &store)
     if(dst->kind.tag == KOOPA_RVT_GLOBAL_ALLOC)
     {
         int reg_id = reg_manager.alloc_reg();
-        std::cout << "  la " << gen_reg(reg_id) << ", " << dst_var.global_name << std::endl;
-        std::cout << "  sw " << gen_reg(src_var.reg_id) << ", 0(" << gen_reg(reg_id) << ")" << std::endl;
+        cout << "  la " << gen_reg(reg_id) << ", " << dst_var.global_name << endl;
+        cout << "  sw " << gen_reg(src_var.reg_id) << ", 0(" << gen_reg(reg_id) << ")" << endl;
     }
     else
     {
@@ -219,35 +219,35 @@ void Visit(const koopa_raw_store_t &store)
 
 void Visit(const koopa_raw_branch_t &branch)
 {
-    std::cout << std::endl << "  # branch" << std::endl;
-    std::string label_true = branch.true_bb->name + 1;
-    std::string label_false = branch.false_bb->name + 1;
+    cout << endl << "  # branch" << endl;
+    string label_true = branch.true_bb->name + 1;
+    string label_false = branch.false_bb->name + 1;
     var_info_t var = Visit(branch.cond);
     reg_manager.free_regs();
-    std::string var_name;
+    string var_name;
     if (var.type == VAR_TYPE::ON_REG)
     {
         var_name = gen_reg(var.reg_id);
     }
     else
     {
-        var_name = std::to_string(var.stack_location) + "(sp)";
+        var_name = to_string(var.stack_location) + "(sp)";
     }
-    std::cout << "  bnez  " << var_name << ", " << label_true << std::endl;
-    std::cout << "  j     " << label_false << std::endl;
+    cout << "  bnez  " << var_name << ", " << label_true << endl;
+    cout << "  j     " << label_false << endl;
 }
 
 void Visit(const koopa_raw_jump_t &jump)
 {
-    std::cout << std::endl << "  # jump" << std::endl;
-    std::string label_target = jump.target->name + 1;
-    std::cout << "  j     " << label_target << std::endl;
+    cout << endl << "  # jump" << endl;
+    string label_target = jump.target->name + 1;
+    cout << "  j     " << label_target << endl;
     reg_manager.free_regs();
 }
 
 void Prologue(const koopa_raw_function_t &func)
 {
-    std::cout << std::endl << "  # prologue" << std::endl;
+    cout << endl << "  # prologue" << endl;
     int stack_size = 0;
     bool store_ra = false;
     int max_args_num = 0;
@@ -284,12 +284,12 @@ void Prologue(const koopa_raw_function_t &func)
     stack_frame.set_stack_size(stack_size, store_ra, max_args_num);
     if (stack_size < MAX_IMMEDIATE_VAL)
     {
-        std::cout << "  addi sp, sp, " << -stack_size << std::endl;
+        cout << "  addi sp, sp, " << -stack_size << endl;
     }
     else
     {
-        std::cout << "  li t0, " << -stack_size << std::endl;
-        std::cout << "  add sp, sp, t0" << std::endl;
+        cout << "  li t0, " << -stack_size << endl;
+        cout << "  add sp, sp, t0" << endl;
     }
     if(store_ra)
     {
@@ -315,7 +315,7 @@ void Prologue(const koopa_raw_function_t &func)
 
 void Epilogue()
 {
-    std::cout << std::endl << "  # epilogue" << std::endl;
+    cout << endl << "  # epilogue" << endl;
     int stack_size = stack_frame.get_stack_size();
     bool store_ra = stack_frame.is_store_ra();
     if (store_ra)
@@ -324,12 +324,12 @@ void Epilogue()
     }
     if (stack_size < MAX_IMMEDIATE_VAL)
     {
-        std::cout << "  addi sp, sp, " << stack_size << std::endl;
+        cout << "  addi sp, sp, " << stack_size << endl;
     }
     else
     {
-        std::cout << "  li t0, " << stack_size << std::endl;
-        std::cout << "  add sp, sp, t0" << std::endl;
+        cout << "  li t0, " << stack_size << endl;
+        cout << "  add sp, sp, t0" << endl;
     }
 }
 
@@ -355,8 +355,8 @@ var_info_t Visit(const koopa_raw_value_t &value)
         else if (info.type == VAR_TYPE::ON_GLOBAL)
         {
             int reg_id = reg_manager.alloc_reg();
-            std::cout << "  la " << gen_reg(reg_id) << ", " << is_visited[value].global_name << std::endl;
-            std::cout << "  lw " << gen_reg(reg_id) << ", 0(" << gen_reg(reg_id) << ")" << std::endl;
+            cout << "  la " << gen_reg(reg_id) << ", " << is_visited[value].global_name << endl;
+            cout << "  lw " << gen_reg(reg_id) << ", 0(" << gen_reg(reg_id) << ")" << endl;
             info.type = VAR_TYPE::ON_REG;
             info.reg_id = reg_id;
             return info;
@@ -380,7 +380,7 @@ var_info_t Visit(const koopa_raw_value_t &value)
         reg_manager.free_regs();
         break;
     case KOOPA_RVT_ALLOC:
-        std::cout << std::endl << "  # alloc" << std::endl;
+        cout << endl << "  # alloc" << endl;
         vinfo.type = VAR_TYPE::ON_STACK;
         vinfo.stack_location = stack_frame.push();
         is_visited[value] = vinfo;
@@ -429,14 +429,14 @@ var_info_t Visit(const koopa_raw_integer_t &interger)
     }
     int new_reg_id = reg_manager.alloc_reg();
     vinfo.reg_id = new_reg_id;
-    std::string reg = gen_reg(new_reg_id);
-    std::cout << "  li " << reg << ", " << std::to_string(value) << std::endl;
+    string reg = gen_reg(new_reg_id);
+    cout << "  li " << reg << ", " << to_string(value) << endl;
     return vinfo;
 }
 
 var_info_t Visit(const koopa_raw_binary_t &binary)
 {
-    std::cout << std::endl << "  # binary" << std::endl;
+    cout << endl << "  # binary" << endl;
     var_info_t lvar = Visit(binary.lhs);
     var_info_t rvar = Visit(binary.rhs);
     if (lvar.type == VAR_TYPE::ON_STACK)
@@ -454,7 +454,7 @@ var_info_t Visit(const koopa_raw_binary_t &binary)
     var_info_t tmp_result;
     tmp_result.type = VAR_TYPE::ON_REG;
     tmp_result.reg_id = reg_manager.alloc_reg();
-    std::string new_reg = gen_reg(tmp_result.reg_id), l_reg = gen_reg(lvar.reg_id), r_reg = gen_reg(rvar.reg_id);
+    string new_reg = gen_reg(tmp_result.reg_id), l_reg = gen_reg(lvar.reg_id), r_reg = gen_reg(rvar.reg_id);
     koopa_raw_binary_op_t op = binary.op;
     switch (op)
     {
@@ -467,23 +467,23 @@ var_info_t Visit(const koopa_raw_binary_t &binary)
     case KOOPA_RBO_MOD:
     case KOOPA_RBO_AND:
     case KOOPA_RBO_OR:
-        std::cout << "  " << op_names[op] << " " << new_reg << ", " << l_reg << ", " << r_reg << std::endl;
+        cout << "  " << op_names[op] << " " << new_reg << ", " << l_reg << ", " << r_reg << endl;
         break;
     case KOOPA_RBO_EQ:
-        std::cout << "  xor " << new_reg << ", " << l_reg << ", " << r_reg << std::endl;
-        std::cout << "  seqz " << new_reg << ", " << new_reg << std::endl;
+        cout << "  xor " << new_reg << ", " << l_reg << ", " << r_reg << endl;
+        cout << "  seqz " << new_reg << ", " << new_reg << endl;
         break;
     case KOOPA_RBO_NOT_EQ:
-        std::cout << "  xor " << new_reg << ", " << l_reg << ", " << r_reg << std::endl;
-        std::cout << "  snez " << new_reg << ", " << new_reg << std::endl;;
+        cout << "  xor " << new_reg << ", " << l_reg << ", " << r_reg << endl;
+        cout << "  snez " << new_reg << ", " << new_reg << endl;;
         break;
     case KOOPA_RBO_LE:  
-        std::cout << "  sgt " << new_reg << ", " << l_reg << ", " << r_reg << std::endl;
-        std::cout << "  xori " << new_reg << ", " << new_reg << ", 1" << std::endl;
+        cout << "  sgt " << new_reg << ", " << l_reg << ", " << r_reg << endl;
+        cout << "  xori " << new_reg << ", " << new_reg << ", 1" << endl;
         break;
     case KOOPA_RBO_GE:
-        std::cout << "  slt " << new_reg << ", " << l_reg << ", " << r_reg << std::endl;
-        std::cout << "  xori " << new_reg << ", " << new_reg << ", 1" << std::endl;
+        cout << "  slt " << new_reg << ", " << l_reg << ", " << r_reg << endl;
+        cout << "  xori " << new_reg << ", " << new_reg << ", 1" << endl;
     }
     var_info_t res;
     res.type = VAR_TYPE::ON_STACK;
@@ -494,7 +494,7 @@ var_info_t Visit(const koopa_raw_binary_t &binary)
 
 var_info_t Visit(const koopa_raw_load_t &load)
 {
-    std::cout << std::endl << "  # load" << std::endl;
+    cout << endl << "  # load" << endl;
     var_info_t src_var = Visit(load.src);
     assert(src_var.type == VAR_TYPE::ON_REG);
     var_info_t dst_var;
@@ -506,7 +506,7 @@ var_info_t Visit(const koopa_raw_load_t &load)
 
 var_info_t Visit(const koopa_raw_call_t &call, bool is_ret)
 {
-    std::cout << std::endl << "  # func" << std::endl;
+    cout << endl << "  # func" << endl;
     reg_manager.free_regs();
     for (int i = 0; i < call.args.len; i++)
     {
@@ -517,7 +517,7 @@ var_info_t Visit(const koopa_raw_call_t &call, bool is_ret)
             if (i + 7 != info.reg_id)
             {
                 reg_manager.alloc_reg(i + 7);
-                std::cout << "  mv " << gen_reg(i + 7) << ", " << gen_reg(info.reg_id) << std::endl;
+                cout << "  mv " << gen_reg(i + 7) << ", " << gen_reg(info.reg_id) << endl;
                 reg_manager.free(info.reg_id);
             }
         }
@@ -527,7 +527,7 @@ var_info_t Visit(const koopa_raw_call_t &call, bool is_ret)
             reg_manager.free(info.reg_id);
         }
     }
-    std::cout << "  call " << call.callee->name + 1 << std::endl;
+    cout << "  call " << call.callee->name + 1 << endl;
     var_info_t info;
     if (is_ret)
     {
@@ -540,19 +540,19 @@ var_info_t Visit(const koopa_raw_call_t &call, bool is_ret)
 
 var_info_t Visit(const koopa_raw_global_alloc_t &global_alloc)
 {
-    std::string gname = "g_" + std::to_string(global_count++);
-    std::cout << std::endl << "  # global alloc" << std::endl;
-    std::cout << "  .data" << std::endl;
-    std::cout << "  .globl " << gname << std::endl;
-    std::cout << gname << ":" << std::endl;
+    string gname = "g_" + to_string(global_count++);
+    cout << endl << "  # global alloc" << endl;
+    cout << "  .data" << endl;
+    cout << "  .globl " << gname << endl;
+    cout << gname << ":" << endl;
     const auto &kind = global_alloc.init->kind.tag;
     switch (kind)
     {
         case KOOPA_RVT_ZERO_INIT:
-            std::cout << "  .zero 4" << std::endl;
+            cout << "  .zero 4" << endl;
             break;
         case KOOPA_RVT_INTEGER:
-            std::cout << "  .word " << global_alloc.init->kind.data.integer.value << std::endl;
+            cout << "  .word " << global_alloc.init->kind.data.integer.value << endl;
             break;
         default:
             assert(false);
@@ -560,11 +560,11 @@ var_info_t Visit(const koopa_raw_global_alloc_t &global_alloc)
     var_info_t vinfo;
     vinfo.type = VAR_TYPE::ON_GLOBAL;
     vinfo.global_name = gname;
-    std::cout << std::endl;
+    cout << endl;
     return vinfo;
 }
 
-std::string gen_reg(int id)
+string gen_reg(int id)
 {
     if (id <= REG_NUM)
     {
@@ -573,18 +573,18 @@ std::string gen_reg(int id)
     assert(false);
 }
 
-void GenLoadStoreInst(std::string op, std::string reg1, int imm, std::string reg2)
+void GenLoadStoreInst(string op, string reg1, int imm, string reg2)
 {
     if (imm < MAX_IMMEDIATE_VAL)
     {
-        std::cout << "  " << op << " " << reg1 << ", " << imm << "(" << reg2 << ")" << std::endl;
+        cout << "  " << op << " " << reg1 << ", " << imm << "(" << reg2 << ")" << endl;
     }
     else
     {
         int reg_id = reg_manager.alloc_reg();
-        std::string reg_tmp = gen_reg(reg_id);
-        std::cout << "  li " << reg_tmp << ", " << imm << std::endl;
-        std::cout << "  add " << reg_tmp << ", " << reg_tmp << ", " << reg2 << std::endl;
-        std::cout << "  " << op << " " << reg1 << ", " << 0 << "(" << reg_tmp << ")" << std::endl;
+        string reg_tmp = gen_reg(reg_id);
+        cout << "  li " << reg_tmp << ", " << imm << endl;
+        cout << "  add " << reg_tmp << ", " << reg_tmp << ", " << reg2 << endl;
+        cout << "  " << op << " " << reg1 << ", " << 0 << "(" << reg_tmp << ")" << endl;
     }
 }
