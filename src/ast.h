@@ -818,7 +818,8 @@ public:
                 }
                 ident = to_string(value);
             }
-            else{
+            else
+            {
                 ident = "%" + to_string(symbol_count++);
                 cout << "  " << ident << " = " << names[op] << " " << rel_exp->ident << ", " << add_exp->ident << endl;
             }

@@ -10,7 +10,6 @@ typedef struct
 {
     SYMBOL_TYPE type;
     int value;
-    int addr;
     string ir_name;
 } symbol_info_t;
 
